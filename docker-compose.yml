@@ -1,0 +1,23 @@
+services:
+  mongo1:
+    image: mongo:latest
+    container_name: mongodb_single
+    ports:
+      - "27108:27017" 
+    command: ["mongod", "--bind_ip_all"]
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: password123
+    volumes:
+      - mongo1-data:/data/db 
+    restart: always
+    networks:
+      - mongoNetwork
+
+volumes:
+  mongo1-data:
+
+networks:
+  mongoNetwork:
+    driver: bridge
+    name: mongoNetwork

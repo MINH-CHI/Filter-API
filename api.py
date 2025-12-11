@@ -1,7 +1,7 @@
 import os
-import uvicorn
-from fastapi import FastAPI, File, UploadFile, HTTPException, Form
-from pydantic import BaseModel
+import uvicorn #type:ignore
+from fastapi import FastAPI, File, UploadFile, HTTPException, Form #type:ignore 
+from pydantic import BaseModel #type:ignore
 from typing import List, Optional
 import json
 from filter import ImageFilter
@@ -17,7 +17,7 @@ app = FastAPI(title="Image Filter API",description="API đánh nhãn và lọc �
 # Biến toàn cục để lưu instance của filter
 filter_tool = None 
 
-@app.on_event("startup")
+@app.on_event("startup") # Khi server khởi động chạy hàm này ngay lập tức
 def startup_event():
     """Hàm chạy 1 lần khi server khởi động để load Model"""
     global filter_tool
@@ -35,7 +35,7 @@ def startup_event():
     except Exception as e:
         print(f"Lỗi khởi tạo model: {e}")
 
-@app.get("/")
+@app.get("/") # Kích hoạt khi người dùng vào link với endpoint "/"
 def health_check():
     return {"status": "ok", "service": "Image Filter API"}
 
