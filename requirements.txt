@@ -5,10 +5,10 @@ pymongo
 opencv-python-headless
 numpy
 pydantic
-torch --index-url https://download.pytorch.org/whl/cpu
-torchvision --index-url https://download.pytorch.org/whl/cpu
 ultralytics
-streamlit 
-plotly 
-pandas 
+# Các thư viện hỗ trợ khác
 requests
+Pillow
+streamlit
+plotly
+pandas

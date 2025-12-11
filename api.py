@@ -4,10 +4,11 @@ from fastapi import FastAPI, File, UploadFile, HTTPException, Form #type:ignore
 from pydantic import BaseModel #type:ignore
 from typing import List, Optional
 import json
+import time
 from filter import ImageFilter
 
 MODEL_PATH = "yolov8n.pt"
-MONGO_URI = os.getenv("MONGO_URI")
+MONGO_URI = os.getenv("MONGO_URI", "mongodb://admin:password123@localhost:27017")
 DB_NAME = "api_request_log" 
 COLLECTION_NAME = "api_unlabeled_images"
 TARGET_CLASSES = ["smartphone", "pen", "note paper","t-shirt","smartwatch","glasses","bracelet","dishwasher","cabinet","sofa","box cutter","shoes","table","scissor","paper"]
@@ -21,19 +22,27 @@ filter_tool = None
 def startup_event():
     """Hàm chạy 1 lần khi server khởi động để load Model"""
     global filter_tool
-    print("Đang khởi tạo AI Model...")
-    try:
-        filter_tool = ImageFilter(
-            model_path=MODEL_PATH,
-            mongo_uri=MONGO_URI,
-            db_name=DB_NAME,
-            collection_name=COLLECTION_NAME,
-            target_classes=TARGET_CLASSES,
-            enable_filter=True,
-            device= 'cpu' # Hoặc 'cpu'
-        )
-    except Exception as e:
-        print(f"Lỗi khởi tạo model: {e}")
+    max_retries = 10  # Thử tối đa 10 lần
+    for i in range(max_retries):
+        try:
+            print(f"🔄 Đang thử kết nối Database và Load Model (Lần {i+1}/{max_retries})...")
+            
+            filter_tool = ImageFilter(
+                model_path=MODEL_PATH,
+                mongo_uri=MONGO_URI,
+                db_name=DB_NAME,
+                collection_name=COLLECTION_NAME,
+                target_classes=TARGET_CLASSES,
+                enable_filter=True,
+                device='cpu'
+            )
+            print("✅ KẾT NỐI THÀNH CÔNG! AI Service đã sẵn sàng.")
+            break # Thoát vòng lặp nếu thành công
+            
+        except Exception as e:
+            print(f"⚠️ Lỗi khởi tạo (Lần {i+1}): {e}")
+            print("⏳ Đợi 5 giây rồi thử lại...")
+            time.sleep(5) # Ngủ 5 giây chờ Mongo khởi động xong
 
 @app.get("/") # Kích hoạt khi người dùng vào link với endpoint "/"
 def health_check():

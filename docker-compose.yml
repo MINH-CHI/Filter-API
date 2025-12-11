@@ -3,7 +3,7 @@ services:
     image: mongo:latest
     container_name: mongodb_single
     ports:
-      - "27108:27017" 
+      - "27017:27017" 
     command: ["mongod", "--bind_ip_all"]
     environment:
       MONGO_INITDB_ROOT_USERNAME: admin
@@ -13,7 +13,37 @@ services:
     restart: always
     networks:
       - mongoNetwork
-
+  api:
+    build: . 
+    container_name: my_python_api
+    restart: always
+    ports:
+      - "8000:8000"
+    depends_on:
+      - mongo1
+    environment:
+      - MONGO_URI=mongodb://admin:password123@mongo1:27017
+      # Biến này giúp chặn torch tìm GPU, tránh lỗi
+      - CUDA_VISIBLE_DEVICES=-1
+    networks:
+      - mongoNetwork
+  dashboard:
+    build: . 
+    container_name: my_streamlit_dashboard
+    # Lệnh chạy riêng cho Streamlit
+    command: streamlit run dashboard.py --server.port 8501 --server.address 0.0.0.0
+    ports:
+      - "8501:8501" # Map cổng 8501 ra ngoài
+    depends_on:
+      - mongo1
+      - api # Dashboard chỉ chạy khi API đã bật
+    environment:
+      # Dashboard kết nối tới Mongo qua tên service
+      - MONGO_URI=mongodb://admin:password123@mongo1:27017
+      # Dashboard kết nối tới API qua tên service 'api'
+      - API_URL=http://api:8000/v1/filter
+    networks:
+      - mongoNetwork
 volumes:
   mongo1-data:
 

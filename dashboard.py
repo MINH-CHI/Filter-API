@@ -1,16 +1,18 @@
-import streamlit as st
-import requests
-import pandas as pd
-import plotly.express as px
-import pymongo
+import streamlit as st #type:ignore
+import requests #type:ignore
+import pandas as pd #type:ignore
+import plotly.express as px #type:ignore
+import pymongo #type:ignore
 import os
-from PIL import Image
+from PIL import Image #type:ignore
 
 st.set_page_config(page_title="AI Image Filter Dashboard", layout="wide", page_icon="🕵️")
 
-# Cấu hình kết nối API 
-API_URL = "http://localhost:8000/v1/filter"
+# Cấu hình kết nối API local
+# API_URL = "http://localhost:8000/v1/filter"
 
+default_api_url = "http://api:8000/v1/filter"
+API_URL = os.getenv("API_URL", "http://localhost:8000/v1/filter")
 # Cấu hình kết nối MongoDB (Cho Tab Thống kê)
 MONGO_URI = os.getenv("MONGO_URI", "mongodb://admin:password123@localhost:27017")
 DB_NAME = "api_request_log"
