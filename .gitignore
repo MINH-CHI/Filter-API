@@ -1,0 +1,10 @@
+# Bỏ qua thư mục môi trường ảo
+filterenv/
+Filter-API/filterenv/
+venv/
+env/
+__pycache__/
+*.pyc
+.DS_Store
+.vscode/
+*.pt
