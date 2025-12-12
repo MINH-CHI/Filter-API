@@ -27,6 +27,13 @@ services:
       # Biến này giúp chặn torch tìm GPU, tránh lỗi
       # - CUDA_VISIBLE_DEVICES=-1
       - MODEL_PATH=finetuned_nc99_best_1.pt
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
     networks:
       - mongoNetwork
   # dashboard:
