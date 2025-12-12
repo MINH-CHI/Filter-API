@@ -7,7 +7,7 @@ import json
 import time
 from filter import ImageFilter
 
-MODEL_PATH = "yolov8n.pt"
+MODEL_PATH = "finetuned_nc99_best_1.pt"
 MONGO_URI = os.getenv("MONGO_URI", "mongodb://admin:password123@localhost:27017")
 DB_NAME = "api_request_log" 
 COLLECTION_NAME = "api_unlabeled_images"
