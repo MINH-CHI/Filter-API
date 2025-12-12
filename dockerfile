@@ -13,8 +13,9 @@ RUN pip install --no-cache-dir --upgrade pip
 RUN pip install --no-cache-dir torch torchvision --extra-index-url https://download.pytorch.org/whl/cpu
 RUN pip install --no-cache-dir -r requirements.txt
 
-RUN pip install gdown
-RUN gdown --id "1SlZVGO_NuN2022TV3j28uq_jwfbev6yk" -O model.pt
+# Setup 2 dòng dưới để tải model từ Google Drive 
+# RUN pip install gdown
+# RUN gdown --id "1SlZVGO_NuN2022TV3j28uq_jwfbev6yk" -O model.pt
 
 COPY . .
 
