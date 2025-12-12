@@ -5,7 +5,8 @@ from pymongo import MongoClient, errors  #type: ignore
 from bson.binary import Binary #type: ignore
 from ultralytics import YOLO #type: ignore
 class ImageFilter:
-    def __init__(self, model_path, mongo_uri, db_name, collection_name,target_classes, enable_filter = True, device=0):
+    def __init__(self, model_path, mongo_uri, db_name, collection_name,target_classes, enable_filter = True, device=0,class_mapping=None):
+        self.class_mapping = class_mapping  
         self.enable_filter = enable_filter
         self.device = device
         self.target_classes = set(target_classes)
@@ -69,14 +70,26 @@ class ImageFilter:
             return False, [] # ảnh lỗi -> bỏ
 
         # Inference
-        results = self.model(img, verbose=False, conf=0.5,device=self.device)
+        results = self.model(img, conf=0.5, verbose=False)
         
         detected_labels = []
         
         # Lấy danh sách tên class phát hiện được
         for result in results:
-            for cls_id in result.boxes.cls:
-                label_name = self.model.names[int(cls_id)]
+            for box in result.boxes:
+                # Lấy ID và Confidence
+                cls_id = int(box.cls[0])
+                conf = float(box.conf[0])
+                
+                label_name = str(cls_id) # Mặc định là số (string)
+                
+                if self.class_mapping:
+                    # Ưu tiên 1: Tra cứu từ Class Mapping (Sửa lỗi ONNX)
+                    label_name = self.class_mapping.get(cls_id, str(cls_id))
+                elif hasattr(self.model, 'names'):
+                    # Ưu tiên 2: Lấy từ nội tại Model (Nếu dùng .pt)
+                    label_name = self.model.names.get(cls_id, str(cls_id))
+                
                 detected_labels.append(label_name)
         
         unique_labels = set(detected_labels)
@@ -92,7 +105,7 @@ class ImageFilter:
         else:
             targets_to_check = self.target_classes
         # Có nhãn, kiểm tra xem có nằm trong các class requirement không ?
-        intersect = unique_labels.intersection(self.target_classes)
+        intersect = unique_labels.intersection(targets_to_check)
 
         if intersect:
             # Có ít nhất 1 nhãn mục tiêu -> GIỮ LẠI
