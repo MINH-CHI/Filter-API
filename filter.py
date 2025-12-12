@@ -21,7 +21,7 @@ class ImageFilter:
 
         if self.enable_filter:
             print(f"[INFO] Đang load model từ {model_path}...")# Tải model
-            self.model = YOLO(model_path)
+            self.model = YOLO(model_path,task="detect")
 
             print(" [ÌNO] Đang kết nối MongoDB...") # kết nối mongo
             try:

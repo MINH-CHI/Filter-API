@@ -13,4 +13,5 @@ streamlit
 plotly
 pandas
 dnspython
-nets
+onnx>=1.14.0
+onnxruntime-gpu

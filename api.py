@@ -7,8 +7,6 @@ import json
 import time
 from filter import ImageFilter
 
-# MODEL_PATH = "model.pt"
-# MODEL_PATH = "yolov8n.pt"
 MODEL_PATH = os.getenv("MODEL_PATH")
 MONGO_URI = os.getenv("MONGO_URI")
 DB_NAME = "api_request_log" 

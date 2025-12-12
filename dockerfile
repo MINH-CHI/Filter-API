@@ -12,7 +12,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip
 # Setup dòng dưới để cài torch với CPU Render
 # RUN pip install --no-cache-dir torch torchvision --extra-index-url https://download.pytorch.org/whl/cpu
-RUN pip install --no-cache-dir torch torchvision
+RUN pip install --no-cache-dir torch torchvision torchaudio
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Setup 2 dòng dưới để tải model từ Google Drive 

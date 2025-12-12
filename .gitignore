@@ -6,6 +6,6 @@ __pycache__/
 *.pyc
 .DS_Store
 .vscode/
-*.pt
+*.onnx
 cloudflared.exe
 args_2.yaml
