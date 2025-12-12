@@ -44,6 +44,7 @@ services:
       - API_URL=http://api:8000/v1/filter
     networks:
       - mongoNetwork
+    
 volumes:
   mongo1-data:
 

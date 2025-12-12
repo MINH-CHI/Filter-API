@@ -1,10 +1,9 @@
-import torch
-import cv2
-import numpy as np
-from pymongo import MongoClient, errors 
-from bson.binary import Binary
-from ultralytics import YOLO
-
+import torch #type: ignore
+import cv2 #type: ignore
+import numpy as np #type: ignore
+from pymongo import MongoClient, errors  #type: ignore
+from bson.binary import Binary #type: ignore
+from ultralytics import YOLO #type: ignore
 class ImageFilter:
     def __init__(self, model_path, mongo_uri, db_name, collection_name,target_classes, enable_filter = True, device=0):
         self.enable_filter = enable_filter
