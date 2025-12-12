@@ -8,3 +8,5 @@ __pycache__/
 .DS_Store
 .vscode/
 *.pt
+cloudflared.exe
+args_2.yaml

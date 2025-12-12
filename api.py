@@ -8,8 +8,9 @@ import time
 from filter import ImageFilter
 
 # MODEL_PATH = "model.pt"
-MODEL_PATH = "yolov8n.pt"
-MONGO_URI = os.getenv("MONGO_URI", "mongodb://admin:password123@localhost:27017")
+# MODEL_PATH = "yolov8n.pt"
+MODEL_PATH = os.getenv("MODEL_PATH")
+MONGO_URI = os.getenv("MONGO_URI")
 DB_NAME = "api_request_log" 
 COLLECTION_NAME = "api_unlabeled_images"
 TARGET_CLASSES = ["smartphone", "pen", "note paper","t-shirt","smartwatch","glasses","bracelet","dishwasher","cabinet","sofa","box cutter","shoes","table","scissor","paper"]

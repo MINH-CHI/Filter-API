@@ -13,3 +13,4 @@ streamlit
 plotly
 pandas
 dnspython
+nets
