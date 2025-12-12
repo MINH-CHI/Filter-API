@@ -1,0 +1,8 @@
+.git
+filtervenv
+__pycache__
+.devcontainer
+*.pt        # Nếu dùng ONNX thì bỏ file pt đi
+args.yaml
+testApi.py
+cloudflared.exe
