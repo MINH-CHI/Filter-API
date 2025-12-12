@@ -15,7 +15,7 @@ st.set_page_config(page_title="AI Image Filter Dashboard", layout="wide", page_i
 default_api_url = "http://api:8000/v1/filter"
 API_URL = os.getenv("API_URL", "http://localhost:8000/v1/filter")
 # Cấu hình kết nối MongoDB (Cho Tab Thống kê)
-MONGO_URI = os.getenv("MONGO_URI", "mongodb://admin:password123@localhost:27017")
+MONGO_URI = os.getenv("MONGO_URI")
 DB_NAME = "api_request_log"
 COLLECTION_NAME = "consumer_logs" 
 
