@@ -39,9 +39,12 @@ services:
       - api # Dashboard chỉ chạy khi API đã bật
     environment:
       # Dashboard kết nối tới Mongo qua tên service
-      - MONGO_URI=mongodb://admin:password123@mongo1:27017
+      # - MONGO_URI=mongodb://admin:password123@mongo1:27017
+      - MONGO_URI=mongodb+srv://minhchisgod672006:<db_password>@minh-cluster.ov4wdff.mongodb.net/?appName=Minh-Cluster
       # Dashboard kết nối tới API qua tên service 'api'
-      - API_URL=http://api:8000/v1/filter
+      # - API_URL=http://api:8000/v1/filter
+      # Setup dòng dưới này để API_URL có thể trỏ lên Render để test nút Quét ngay trên Dashboard luôn
+      - API_URL=https://api-loc-anh-ai.onrender.com/v1/filter
     networks:
       - mongoNetwork
     

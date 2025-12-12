@@ -4,6 +4,7 @@ import pandas as pd #type:ignore
 import plotly.express as px #type:ignore
 import pymongo #type:ignore
 import os
+import time
 from PIL import Image #type:ignore
 
 st.set_page_config(page_title="AI Image Filter Dashboard", layout="wide", page_icon="🕵️")
@@ -100,8 +101,15 @@ with tab1:
 
 with tab2:
     st.header("Thống kê dữ liệu Log")
-    if st.button("🔄 Làm mới dữ liệu"):
-        st.cache_data.clear()
+    col_control_1, col_control_2 = st.columns([1, 4])
+    
+    with col_control_1:
+        # Nút gạt bật tắt chế độ tự động
+        auto_refresh = st.toggle("🔴 Chế độ Live (5s)", value=False)
+        
+    with col_control_2:
+        if st.button("🔄 Làm mới ngay lập tức"):
+            st.rerun()
         
     df = load_logs()
     
@@ -147,3 +155,6 @@ with tab2:
         # Bảng dữ liệu
         st.subheader("Lịch sử chi tiết")
         st.dataframe(df, use_container_width=True)
+    if auto_refresh:
+        time.sleep(5) # Đợi 5 giây
+        st.rerun()
