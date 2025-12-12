@@ -62,6 +62,9 @@ def startup_event():
                 enable_filter=True,
                 device=0
             )
+            if filter_tool and hasattr(filter_tool, 'model'):
+                print("🛠️ Đang gán lại tên Class thủ công cho Model ONNX...")
+                filter_tool.model.names = CLASS_MAPPING
             print("✅ KẾT NỐI THÀNH CÔNG! AI Service đã sẵn sàng.")
             break # Thoát vòng lặp nếu thành công
             
