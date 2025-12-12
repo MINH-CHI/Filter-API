@@ -70,7 +70,7 @@ class ImageFilter:
             return False, [] # ảnh lỗi -> bỏ
 
         # Inference
-        results = self.model(img, conf=0.5, verbose=False)
+        results = self.model(img, conf=0.65, verbose=False)
         
         detected_labels = []
         
