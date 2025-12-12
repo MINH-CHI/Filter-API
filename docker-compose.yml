@@ -44,7 +44,7 @@ services:
       # Dashboard kết nối tới API qua tên service 'api'
       # - API_URL=http://api:8000/v1/filter
       # Setup dòng dưới này để API_URL có thể trỏ lên Render để test nút Quét ngay trên Dashboard luôn
-      - API_URL=https://api-loc-anh-ai.onrender.com/v1/filter
+      - API_URL=https://filter-api-ywwi.onrender.com/v1/filter
     networks:
       - mongoNetwork
     
