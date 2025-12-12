@@ -26,7 +26,6 @@ def startup_event():
     for i in range(max_retries):
         try:
             print(f"🔄 Đang thử kết nối Database và Load Model (Lần {i+1}/{max_retries})...")
-            
             filter_tool = ImageFilter(
                 model_path=MODEL_PATH,
                 mongo_uri=MONGO_URI,
@@ -34,7 +33,7 @@ def startup_event():
                 collection_name=COLLECTION_NAME,
                 target_classes=TARGET_CLASSES,
                 enable_filter=True,
-                device='cpu'
+                device=0
             )
             print("✅ KẾT NỐI THÀNH CÔNG! AI Service đã sẵn sàng.")
             break # Thoát vòng lặp nếu thành công
