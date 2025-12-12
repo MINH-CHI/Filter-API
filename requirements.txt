@@ -12,3 +12,4 @@ Pillow
 streamlit
 plotly
 pandas
+dnspython
