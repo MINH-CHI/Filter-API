@@ -15,3 +15,4 @@ pandas
 dnspython
 onnx>=1.14.0
 onnxruntime-gpu
+email-validator

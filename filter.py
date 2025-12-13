@@ -4,6 +4,8 @@ import numpy as np #type: ignore
 from pymongo import MongoClient, errors  #type: ignore
 from bson.binary import Binary #type: ignore
 from ultralytics import YOLO #type: ignore
+from datetime import datetime
+from bson.binary import Binary
 class ImageFilter:
     def __init__(self, model_path, mongo_uri, db_name, collection_name,target_classes, enable_filter = True, device=0,class_mapping=None):
         self.class_mapping = class_mapping  
@@ -97,7 +99,14 @@ class ImageFilter:
         
         # Model trả về None (Không phát hiện gì hoặc confidence thấp)
         if not unique_labels:
-            self._log_to_mongo(metadata, image_bytes, reason="Model returned None")
+            self._log_to_mongo(
+            metadata=metadata, 
+            image_bytes=image_bytes, 
+            detected_labels=[], 
+            is_valid=False, 
+            action="DISCARD", 
+            reason="Model returned None"
+        )
             return False, [] # Bỏ sau khi đã ném vào DB
         
         if custom_targets and len(custom_targets) > 0:
@@ -109,26 +118,62 @@ class ImageFilter:
 
         if intersect:
             # Có ít nhất 1 nhãn mục tiêu -> GIỮ LẠI
-            for label in intersect:
-                self.stats[label] += 1
-            return True, list(unique_labels)
+            is_valid_result = bool(intersect) # True nếu có giao nhau
+            action_result = "KEEP" if is_valid_result else "DISCARD"
+            
+            # Gọi hàm log cho trường hợp đã detect ra (Dù KEEP hay DISCARD đều log hết)
+            self._log_to_mongo(
+                metadata=metadata,
+                image_bytes=image_bytes,
+                detected_labels=list(unique_labels),
+                is_valid=is_valid_result,
+                action=action_result,
+                reason="Filtered by Target Classes"
+            )
+
+            return is_valid_result, list(unique_labels)
         else:
             # Có nhãn nhưng không thuộc các class requirement -> bỏ
             return False, list(unique_labels)
 
-    def _log_to_mongo(self, metadata, image_bytes,reason):
-        """Lưu metadata của ảnh và ảnh có nhãn chưa học vào MongoDB để xử lý sau"""
+    def _log_to_mongo(self, metadata, image_bytes, detected_labels=None, is_valid=False, action="DISCARD", reason=None):
+        """
+        Ghi log chi tiết mọi request vào MongoDB để phục vụ Dashboard.
+        """
         try:
+            # Xử lý Metadata (Tránh lỗi nếu metadata là None)
+            meta = metadata or {}
+            
+            # Lôi thông tin quan trọng ra ngoài (QUAN TRỌNG)
+            user_name = meta.get("user", "Anonymous")
+            source = meta.get("api_source", "unknown")
+            filename = meta.get("filename", "unknown")
+
+            # Tạo document cấu trúc phẳng (Flat Structure)
             doc = {
-                "reason": reason,
-                "metadata": metadata or {},
-                "status": "pending_review",
-                "image_data": Binary(image_bytes)
+                "timestamp": datetime.now(),       # Thời gian server nhận ảnh
+                "user": user_name,                 # <--- Đây là cái bạn đang cần hiển thị
+                "source": source,
+                "filename": filename,
+                "is_valid": is_valid,              # Kết quả logic: True/False
+                "action": action,                  # Hành động: KEEP/DISCARD
+                "detected_labels": detected_labels if detected_labels else [],
+                "reason": reason,                  # Ghi chú thêm (nếu có)
+                
+                # Lưu ảnh nhỏ (Thumbnail) hoặc ảnh gốc
+                # Lưu ý: MongoDB giới hạn 16MB/doc. Nếu ảnh quá to nên resize trước khi lưu.
+                "image_data": Binary(image_bytes) if image_bytes else None,
+                
+                # Lưu lại toàn bộ metadata gốc vào 1 góc để debug sau này
+                "raw_metadata": meta 
             }
+
+            # Insert vào Database
             self.collection.insert_one(doc)
-            print("[ÌNOR] Đã lưu case None vào MongoDB")
+            print(f"[MONGO] ✅ Đã lưu log user: {user_name} | Labels: {detected_labels}")
+
         except Exception as e:
-            print(f"[ERROR] Lỗi khi lưu case vòa MongoDB: {e}")
+            print(f"[ERROR] ❌ Lỗi khi lưu MongoDB: {e}")
 
     def get_stats(self):
         """Trả về thống kê số lượng đã thu thập"""
