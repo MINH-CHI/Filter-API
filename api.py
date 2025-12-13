@@ -1,11 +1,14 @@
 import os
 import uvicorn #type:ignore
-from fastapi import FastAPI, File, UploadFile, HTTPException, Form #type:ignore 
+from fastapi import FastAPI, File, UploadFile, HTTPException, Form, Depends, Security #type:ignore 
 from pydantic import BaseModel #type:ignore
 from typing import List, Optional
 import json
 import time
 from filter import ImageFilter
+from secrets_config import API_KEYS
+from fastapi.security.api_key import APIKeyHeader  #type:ignore
+from starlette.status import HTTP_403_FORBIDDEN  #type:ignore
 
 MODEL_PATH = os.getenv("MODEL_PATH", "finetuned_nc126_best_mAP.onnx")
 MONGO_URI = os.getenv("MONGO_URI")
@@ -41,7 +44,17 @@ CLASS_MAPPING = {
     125: 'cellq'
 }
 app = FastAPI(title="Image Filter API",description="API đánh nhãn và lọc ảnh tự động sử dụng YOLO.",version="1.0.0")
+api_key_header = APIKeyHeader(name="x-api-key", auto_error=False)
 
+# Hàm kiểm tra Key
+async def get_api_key(api_key_header: str = Security(api_key_header)):
+    if api_key_header in API_KEYS:
+        return API_KEYS[api_key_header] # Trả về tên người dùng
+    else:
+        raise HTTPException(
+            status_code=HTTP_403_FORBIDDEN, 
+            detail="❌ Sai API Key hoặc chưa có quyền truy cập!"
+        )
 # Biến toàn cục để lưu instance của filter
 filter_tool = None 
 
@@ -78,7 +91,8 @@ def health_check():
 @app.post("/v1/filter")
 async def filter_image(
     file: UploadFile = File(...), 
-    source: Optional[str] = Form("unknown")
+    source: Optional[str] = Form("unknown"),
+    user_name: str = Depends(get_api_key)
 ):
     """
     Endpoint nhận file ảnh (Upload) và trả về kết quả lọc.
@@ -94,12 +108,14 @@ async def filter_image(
         image_bytes = await file.read()
     except Exception as e:
         raise HTTPException(status_code=400, detail="Lỗi đọc file")
+    print(f"🕵️‍♂️ Request từ: {user_name} (Source: {source})")
 
     # Tạo metadata để log
     metadata = {
         "filename": file.filename,
         "content_type": file.content_type,
-        "api_source": source
+        "api_source": source,
+        "user": user_name
     }
 
     # Gọi Tool Filter
@@ -110,7 +126,9 @@ async def filter_image(
         "filename": file.filename,
         "is_valid": is_valid,
         "detected_labels": labels,
-        "action": "KEEP" if is_valid else "DISCARD"
+        "action": "KEEP" if is_valid else "DISCARD",
+        "processed_by": "Server của Minh",
+        "user": user_name
     }
 
 if __name__ == "__main__":
