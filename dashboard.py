@@ -4,7 +4,7 @@ import pandas as pd #type:ignore
 import plotly.express as px #type:ignore
 import pymongo #type:ignore
 import os
-from dotenv import load_dotenv
+from dotenv import load_dotenv #type: ignore
 import time
 from PIL import Image #type:ignore
 from datetime import datetime, timedelta, time

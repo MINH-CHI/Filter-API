@@ -10,3 +10,4 @@ __pycache__/
 *.onnx
 cloudflared.exe
 args_2.yaml
+secrets_config.py

@@ -1,15 +1,58 @@
 import subprocess
 import re
 import sys
+import secrets
+import string
 import time
-import pymongo
+import pymongo #type: ignore
 from datetime import datetime
 import os
-from dotenv import load_dotenv
+from dotenv import load_dotenv #type: ignore
 load_dotenv()
 MONGO_URI = os.getenv("MONGO_URI") 
 DB_NAME = "api_request_log"
 CONFIG_COLLECTION = "system_config"
+def ensure_api_keys_exist():
+    """
+    Kiểm tra file secrets_config.py. 
+    Nếu chưa có -> Tạo mới.
+    Nếu có rồi -> Bỏ qua (để tránh đổi key của người dùng).
+    """
+    file_name = "secrets_config.py"
+    
+    if os.path.exists(file_name):
+        print(f"✅ Đã tìm thấy file '{file_name}'. Giữ nguyên Key cũ.")
+        return
+
+    print(f"⚠️ Chưa thấy file '{file_name}'. Đang tạo Key mới...")
+    
+    # Logic tạo key
+    def generate_key(prefix="sk", length=32):
+        alphabet = string.ascii_letters + string.digits
+        random_string = ''.join(secrets.choice(alphabet) for _ in range(length))
+        return f"{prefix}_{random_string}"
+
+    users = [
+        ("Sếp khánh", "Data_team"),
+        ("Anh Khôi", "Data_team"),
+        ("Vương", "AI_team"),
+        ("Mạnh", "AI_team"),
+        ("Minh","Data_team")
+    ]
+
+    file_content = "API_KEYS = {\n"
+    print("\n--- 🔑 DANH SÁCH KEY VỪA TẠO ---")
+    for name, prefix in users:
+        key = generate_key(prefix=prefix)
+        file_content += f'    "{key}": "{name}",\n'
+        print(f"👤 {name}: {key}")
+    file_content += "}\n"
+    print("--------------------------------\n")
+
+    with open(file_name, "w", encoding="utf-8") as f:
+        f.write(file_content)
+    
+    print(f"💾 Đã lưu key vào '{file_name}'. Nhớ chạy build lại Docker nhé!")
 def get_cloudflare_url():
     print("🚀 Đang khởi động Cloudflare Tunnel...")
     
@@ -75,14 +118,13 @@ if __name__ == "__main__":
     if not MONGO_URI:
         print("❌ Lỗi: Chưa cấu hình MONGO_URI trong file .env local!")
         sys.exit(1)
-
+    ensure_api_keys_exist()
     result = get_cloudflare_url()
     if not result:
         sys.exit(1)
         
     url, cf_process = result
-    
-    # 1. Ghi lên Cloud Database
+    # Ghi lên Cloud Database
     save_url_to_mongo(url)
     
     print("\n--- 🌐 HỆ THỐNG ĐÃ ONLINE ---")
