@@ -64,28 +64,33 @@ class ImageFilter:
     def process(self, image_bytes, metadata=None,custom_targets=None):
         # check cờ tắt/bật
         if not self.enable_filter:
-            return True, []
+            return True, [], []
 
         # Decode ảnh
         img = self._bytes_to_image(image_bytes)
         if img is None:
-            return False, [] # ảnh lỗi -> bỏ
+            return False, [], [] # ảnh lỗi -> bỏ
 
         # Inference
-        results = self.model(img, conf=0.8, verbose=False)
-        
+        results = self.model(img, conf=0.8, verbose=False)        
+        detailed_info = []
         detected_labels = set()
         
         # Lấy danh sách tên class phát hiện được
         for result in results:
             for box in result.boxes:
                 cls_id = int(box.cls[0])
+                conf = float(box.conf[0])
                 
                 label_name = str(cls_id)
                 if self.class_mapping:
                     label_name = self.class_mapping.get(cls_id, str(cls_id))
                 elif hasattr(self.model, 'names'):
                     label_name = self.model.names.get(cls_id, str(cls_id))
+                detailed_info.append({
+                    "object": label_name,
+                    "confidence": round(conf, 2)
+                })
                 
                 detected_labels.add(label_name)
         
@@ -102,7 +107,7 @@ class ImageFilter:
             action="DISCARD", 
             reason="Model returned None"
         )
-            return False, [] # Bỏ sau khi đã ném vào DB
+            return False, [], [] # Bỏ sau khi đã ném vào DB
         
         if custom_targets and len(custom_targets) > 0:
             targets_to_check = set(custom_targets)
@@ -119,6 +124,7 @@ class ImageFilter:
             metadata=metadata,
             image_bytes=image_bytes,
             detected_labels=list(detected_labels),
+            detections_detail=detailed_info,
             is_valid=is_valid_result,
             action=action_result,
             reason="Filtered by Target Classes"
@@ -130,9 +136,9 @@ class ImageFilter:
                 if label in self.stats:
                     self.stats[label] += 1
 
-        return is_valid_result, list(detected_labels)
+        return is_valid_result, list(detected_labels), detailed_info
 
-    def _log_to_mongo(self, metadata, image_bytes, detected_labels=None, is_valid=False, action="DISCARD", reason=None):
+    def _log_to_mongo(self, metadata, image_bytes, detected_labels=None, detections_detail=None,is_valid=False, action="DISCARD", reason=None):
         """
         Ghi log chi tiết mọi request vào MongoDB để phục vụ Dashboard.
         """
@@ -148,12 +154,13 @@ class ImageFilter:
             # Tạo document cấu trúc phẳng (Flat Structure)
             doc = {
                 "timestamp": datetime.now(),       # Thời gian server nhận ảnh
-                "user": user_name,                 # <--- Đây là cái bạn đang cần hiển thị
+                "user": user_name,                 
                 "source": source,
                 "filename": filename,
                 "is_valid": is_valid,              # Kết quả logic: True/False
                 "action": action,                  # Hành động: KEEP/DISCARD
                 "detected_labels": detected_labels if detected_labels else [],
+                "detections_detail": detections_detail if detections_detail else [],
                 "reason": reason,                  # Ghi chú thêm (nếu có)
                 
                 # Lưu ảnh nhỏ (Thumbnail) hoặc ảnh gốc
@@ -175,16 +182,6 @@ class ImageFilter:
         """Trả về thống kê số lượng đã thu thập"""
         return self.stats
     
-    # Hướng dẫn sử dụng
-    # filter = ImageFilter(
-    # model_path="yolov8n.pt",       # file weights (.pt)
-    # mongo_uri="mongodb://localhost:27017/",
-    # db_name="minh_db",
-    # collection_name="unknown_images",
-    # target_classes=TARGET_CLASSES,
-    # enable_filter=True            
-    # )
-    
-    # meta_info = {"source_url": image_url, "scraper_id": "bot_01"} 
-    
-    # is_valid, labels = filter.process(image_bytes, metadata=meta_info) => trả về (True/False, [danh sách nhãn phát hiện])
+    # Test 1k sample đều (được học ,imbalance, chưa được học) -> Thống kê confidence
+    # trên 90 -> pass
+    # THẤP -> ROLL BACCK XỬ LÝ LẠI -> Model Xử lý như thế nào ?

@@ -132,13 +132,14 @@ async def filter_image(
     }
 
     # Gọi Tool Filter
-    is_valid, labels = filter_tool.process(image_bytes, metadata=metadata)
+    is_valid, labels, details = filter_tool.process(image_bytes, metadata=metadata)
 
     # Trả kết quả JSON
     return {
         "filename": file.filename,
         "is_valid": is_valid,
         "detected_labels": labels,
+        "confidence": details,
         "action": "KEEP" if is_valid else "DISCARD",
         "processed_by": "Server của Minh",
         "user": user_name

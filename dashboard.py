@@ -112,7 +112,7 @@ if not api_key:
     st.warning("⚠️ Vui lòng nhập **API Key** ở thanh bên trái (Sidebar) để bắt đầu sử dụng.")
     st.stop()
 
-tab1, tab2 = st.tabs(["🚀 Dùng thử (Demo)", "📊 Thống kê (Analytics)"])
+tab1, tab2, tab3 = st.tabs(["🚀 Demo Lọc Ảnh", "📊 Giám sát Live", "🧪 Phân tích Batch Test"])
 
 with tab1:
     st.header("Test Model AI")
@@ -162,8 +162,19 @@ with tab1:
                                     st.warning(f"⚠️ {action}")
                                 
                                 st.write(f"**Người dùng:** {result.get('user', 'Unknown')}")
-                                st.write("**Vật thể phát hiện:**")
-                                st.write(result.get('detected_labels', []))
+                                st.write("**Kết quả chi tiết:**")
+                                
+                                detections = result.get('detections', [])
+                                
+                                if detections:
+                                    # Nếu có thông tin confidence
+                                    for item in detections:
+                                        name = item.get('object', 'Unknown')
+                                        conf = item.get('confidence', 0)
+                                        st.write(f"- 🎯 **{name}**: `{conf * 100:.1f}%`")
+                                        st.progress(conf) 
+                                else:
+                                    st.write(result.get('detected_labels', []))
                                 
                                 with st.expander("Xem JSON phản hồi"):
                                     st.json(result)
@@ -247,3 +258,115 @@ with tab2:
     if auto_refresh:
         time.sleep(5) # Đợi 5 giây
         st.rerun()
+with tab3:
+    st.header("🧪 Đánh giá Hiệu năng Model (1000 Samples)")
+    st.markdown("""
+    Upload file kết quả từ script `batch_test.py` để phân tích độ tin cậy (Confidence) và các trường hợp sai sót.
+    """)
+
+    # 1. Nguồn dữ liệu: Tự tìm file hoặc Upload
+    uploaded_file = st.file_uploader("Chọn file Excel kết quả (test_results_1000.xlsx)", type=['xlsx'])
+    
+    # Tự động tìm file nếu có sẵn ở server
+    default_file = "test_results_1000.xlsx"
+    df_batch = None
+    
+    if uploaded_file:
+        df_batch = pd.read_excel(uploaded_file)
+        st.success(f"Đã tải file: {uploaded_file.name}")
+    elif os.path.exists(default_file):
+        st.info(f"Đã tìm thấy file `{default_file}` trên server. Đang load...")
+        df_batch = pd.read_excel(default_file)
+    
+    # 2. Hiển thị Dashboard phân tích
+    if df_batch is not None:
+        # --- CẤU HÌNH NGƯỠNG PASS ---
+        col_conf1, col_conf2 = st.columns([1, 3])
+        with col_conf1:
+            threshold = st.slider("Ngưỡng Pass Confidence", 0.0, 1.0, 0.90, 0.05)
+        
+        # Thêm cột đánh giá dựa trên ngưỡng slider
+        df_batch['Pass_Threshold'] = df_batch['confidence'] >= threshold
+        
+        # Lọc dữ liệu
+        total_samples = len(df_batch)
+        passed_samples = len(df_batch[df_batch['Pass_Threshold'] == True])
+        failed_samples = total_samples - passed_samples
+        pass_rate = (passed_samples / total_samples) * 100
+        
+        # KPI Cards
+        k1, k2, k3, k4 = st.columns(4)
+        k1.metric("Tổng mẫu test", total_samples)
+        k2.metric(f"Đạt chuẩn (Conf >= {threshold})", passed_samples)
+        k3.metric("Dưới chuẩn (Cần review)", failed_samples, delta_color="inverse")
+        k4.metric("Tỷ lệ Pass", f"{pass_rate:.1f}%")
+        
+        st.divider()
+        
+        # --- BIỂU ĐỒ 1: PHÂN PHỐI CONFIDENCE (QUAN TRỌNG NHẤT) ---
+        st.subheader("1. Biểu đồ Phân phối Độ tin cậy (Confidence Distribution)")
+        st.caption("Biểu đồ này cho biết Model đang 'tự tin' hay 'lưỡng lự'. Càng lệch về bên phải (1.0) càng tốt.")
+        
+        fig_hist = px.histogram(
+            df_batch, 
+            x="confidence", 
+            color="type", # Phân màu theo Valid/Imbalance/Unknown
+            nbins=50, 
+            marginal="box", # Thêm biểu đồ box plot ở trên
+            hover_data=df_batch.columns,
+            color_discrete_map={"valid": "green", "imbalance": "orange", "unknown": "red"}
+        )
+        # Vẽ đường kẻ đỏ ngưỡng threshold
+        fig_hist.add_vline(x=threshold, line_width=3, line_dash="dash", line_color="red")
+        st.plotly_chart(fig_hist, use_container_width=True)
+
+        # --- BIỂU ĐỒ 2: CHI TIẾT THEO LOẠI ---
+        c1, c2 = st.columns(2)
+        with c1:
+            st.subheader("2. Tỷ lệ Pass theo nhóm dữ liệu")
+            # Group by Type và tính tỷ lệ pass
+            pass_by_type = df_batch.groupby('type')['Pass_Threshold'].mean().reset_index()
+            pass_by_type['Pass_Threshold'] = pass_by_type['Pass_Threshold'] * 100
+            
+            fig_bar = px.bar(
+                pass_by_type, x='type', y='Pass_Threshold', 
+                color='type', 
+                text_auto='.1f',
+                title="Tỷ lệ đạt chuẩn (%) theo từng loại dữ liệu"
+            )
+            fig_bar.update_yaxes(range=[0, 100])
+            st.plotly_chart(fig_bar, use_container_width=True)
+            
+        with c2:
+            st.subheader("3. Scatter Plot: Confidence vs. Labels")
+            # Giúp nhìn nhanh class nào hay bị điểm thấp
+            fig_scatter = px.scatter(
+                df_batch, x="predicted_label", y="confidence", color="type",
+                hover_data=['filename', 'actual_label'],
+                title="Độ tin cậy của từng Class dự đoán"
+            )
+            fig_scatter.add_hline(y=threshold, line_dash="dash", line_color="red")
+            st.plotly_chart(fig_scatter, use_container_width=True)
+
+        # --- DANH SÁCH CẦN REVIEW (Failed Cases) ---
+        st.subheader("⚠️ Danh sách các ca cần đánh giá lại (Fail Cases)")
+        st.write(f"Dưới đây là các ảnh có Confidence < {threshold}. Bạn hãy kiểm tra xem tại sao.")
+        
+        # Lọc ra các ca fail
+        failed_df = df_batch[df_batch['Pass_Threshold'] == False].sort_values(by="confidence")
+        
+        # Hiển thị bảng tương tác
+        st.dataframe(
+            failed_df[['filename', 'type', 'actual_label', 'predicted_label', 'confidence']], 
+            use_container_width=True
+        )
+        
+        with st.expander("💡 Gợi ý xử lý"):
+            st.markdown("""
+            * **Nếu Type = 'imbalance' và Conf thấp:** Model chưa học đủ góc độ này -> **Gửi Team AI train thêm.**
+            * **Nếu Type = 'valid' và Conf thấp:** Ảnh có thể bị mờ, nhiễu hoặc Model nhận diện kém -> **Cần kiểm tra kỹ.**
+            * **Nếu Type = 'unknown' mà Conf CAO (False Positive):** Nguy hiểm! Model đang nhận nhầm rác thành vật thể -> **Cần chỉnh lại Threshold hoặc train thêm class background.**
+            """)
+
+    else:
+        st.warning("⚠️ Chưa có dữ liệu. Hãy chạy script `batch_test.py` trước, sau đó upload file Excel vào đây.")
