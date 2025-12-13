@@ -6,7 +6,7 @@ from typing import List, Optional
 import json
 import time
 from filter import ImageFilter
-from secrets_config import API_KEYS
+from secrets_config import API_KEYS #type:ignore
 from fastapi.security.api_key import APIKeyHeader  #type:ignore
 from starlette.status import HTTP_403_FORBIDDEN  #type:ignore
 

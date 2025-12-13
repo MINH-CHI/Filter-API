@@ -18,7 +18,7 @@ class ImageFilter:
             # Check nhanh xem máy có nhận GPU không
             if self.device == 0 and not torch.cuda.is_available():
                 print("[WARNING] Đã chọn GPU nhưng Torch không tìm thấy CUDA -> sẽ tự động chuyển về CPU.")
-                self.device = 'cpu'
+                self.device = 'cpu' # ÉP dùng GPU
             else:
                 print(f"Đang sử dụng thiết bị: {self.device}")
 
@@ -39,7 +39,7 @@ class ImageFilter:
         else:
             print("Filter đang tắt. Mọi ảnh sẽ được chấp nhận.")
 
-    def _bytes_to_image(self, image_bytes):
+    def _bytes_to_image(self, image_bytes): # Check đối tượng của OpenCV
         if not isinstance(image_bytes, (bytes, bytearray)):
             print(f"[Error] Dữ liệu đầu vào không phải là bytes. Nhận được kiểu: {type(image_bytes)}")
             return None
@@ -49,7 +49,7 @@ class ImageFilter:
             return None
 
         try:
-            nparr = np.frombuffer(image_bytes, np.uint8)
+            nparr = np.frombuffer(image_bytes, np.uint8) # Truyền thẳng Byte vào model
             img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
             if img is None:
                 print("[Warning] Dữ liệu bytes không phải là file ảnh hợp lệ hoặc bị hỏng.")
@@ -72,9 +72,9 @@ class ImageFilter:
             return False, [] # ảnh lỗi -> bỏ
 
         # Inference
-        results = self.model(img, conf=0.65, verbose=False)
+        results = self.model(img, conf=0.8, verbose=False)
         
-        detected_labels = []
+        detected_labels = set()
         
         # Lấy danh sách tên class phát hiện được
         for result in results:
@@ -87,13 +87,13 @@ class ImageFilter:
                 elif hasattr(self.model, 'names'):
                     label_name = self.model.names.get(cls_id, str(cls_id))
                 
-                detected_labels.append(label_name)
+                detected_labels.add(label_name)
         
-        unique_labels = set(detected_labels)
+        # unique_labels = set(detected_labels)
 
         
         # Model trả về None (Không phát hiện gì hoặc confidence thấp)
-        if not unique_labels:
+        if not detected_labels:
             self._log_to_mongo(
             metadata=metadata, 
             image_bytes=image_bytes, 
@@ -109,7 +109,7 @@ class ImageFilter:
         else:
             targets_to_check = self.target_classes
         # Có nhãn, kiểm tra xem có nằm trong các class requirement không ?
-        intersect = unique_labels.intersection(targets_to_check)
+        intersect = detected_labels.intersection(targets_to_check)
 
         is_valid_result = bool(intersect) # True nếu có giao nhau, False nếu không
         action_result = "KEEP" if is_valid_result else "DISCARD"
@@ -118,7 +118,7 @@ class ImageFilter:
         self._log_to_mongo(
             metadata=metadata,
             image_bytes=image_bytes,
-            detected_labels=list(unique_labels),
+            detected_labels=list(detected_labels),
             is_valid=is_valid_result,
             action=action_result,
             reason="Filtered by Target Classes"
@@ -130,7 +130,7 @@ class ImageFilter:
                 if label in self.stats:
                     self.stats[label] += 1
 
-        return is_valid_result, list(unique_labels)
+        return is_valid_result, list(detected_labels)
 
     def _log_to_mongo(self, metadata, image_bytes, detected_labels=None, is_valid=False, action="DISCARD", reason=None):
         """
