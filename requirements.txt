@@ -8,6 +8,7 @@ pydantic
 ultralytics
 # Các thư viện hỗ trợ khác
 requests
+python-dotenv
 Pillow
 streamlit
 plotly

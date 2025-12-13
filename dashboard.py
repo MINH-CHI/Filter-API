@@ -4,22 +4,54 @@ import pandas as pd #type:ignore
 import plotly.express as px #type:ignore
 import pymongo #type:ignore
 import os
+from dotenv import load_dotenv
 import time
 from PIL import Image #type:ignore
 from datetime import datetime, timedelta, time
-
+load_dotenv()
+BASE_URL = os.getenv("API_BASE_URL", "http://localhost:8000")
 st.set_page_config(page_title="AI Image Filter Dashboard", layout="wide", page_icon="🕵️")
 
 # Cấu hình kết nối API local
 # API_URL = "http://localhost:8000/v1/filter"
 
-default_api_url = "http://api:8000/v1/filter"
-API_URL = os.getenv("API_URL", "http://localhost:8000/v1/filter")
+# default_api_url = "http://api:8000/v1/filter"
+# API_URL = os.getenv("API_URL", "http://localhost:8000/v1/filter")
+if BASE_URL.endswith("/"):
+    BASE_URL = BASE_URL[:-1]
+API_URL = f"{BASE_URL}/v1/filter"
 # Cấu hình kết nối MongoDB (Cho Tab Thống kê)
 MONGO_URI = os.getenv("MONGO_URI")
 DB_NAME = "api_request_log"
 COLLECTION_NAME = "api_unlabeled_images" 
+CONFIG_COLLECTION = "system_config"
+@st.cache_data(ttl=60) # Cache 60 giây để đỡ gọi DB nhiều
+def get_api_url_from_mongo():
+    """Lấy API URL mới nhất từ MongoDB"""
+    try:
+        client = pymongo.MongoClient(MONGO_URI, serverSelectionTimeoutMS=2000)
+        db = client[DB_NAME]
+        coll = db[CONFIG_COLLECTION]
+        
+        doc = coll.find_one({"config_key": "active_api_url"})
+        if doc and "value" in doc:
+            return doc["value"]
+    except Exception:
+        pass
+    return None
+cloud_url = get_api_url_from_mongo()
 
+if cloud_url:
+    BASE_URL = cloud_url
+    st.sidebar.success(f"🟢 Đã kết nối API: {BASE_URL.split('//')[1]}")
+else:
+    # 2. Fallback về cấu hình mặc định hoặc Local
+    BASE_URL = os.getenv("API_BASE_URL", "http://localhost:8000")
+    st.sidebar.warning("⚠️ Không tìm thấy URL từ Mongo, đang dùng Default.")
+
+if BASE_URL.endswith("/"): 
+    BASE_URL = BASE_URL[:-1]
+API_URL = f"{BASE_URL}/v1/filter"
 with st.sidebar:
     st.image("https://cdn-icons-png.flaticon.com/512/2593/2593491.png", width=50)
     st.title("Cấu hình")
