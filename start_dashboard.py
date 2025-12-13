@@ -6,7 +6,7 @@ import pymongo
 from datetime import datetime
 import os
 from dotenv import load_dotenv
-
+load_dotenv()
 MONGO_URI = os.getenv("MONGO_URI") 
 DB_NAME = "api_request_log"
 CONFIG_COLLECTION = "system_config"

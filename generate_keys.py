@@ -12,7 +12,8 @@ users = [
     ("Anh Khôi", "Data_team"),
     ("Vương", "AI_team"),
     ("Mạnh", "AI_team"),
-    ("Minh","Data_team")
+    ("Minh","Data_team"),
+    ("Hoàng","Bach_khoa")
 ]
 
 # Nội dung file config sẽ được tạo ra
