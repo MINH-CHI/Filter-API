@@ -79,17 +79,12 @@ class ImageFilter:
         # Lấy danh sách tên class phát hiện được
         for result in results:
             for box in result.boxes:
-                # Lấy ID và Confidence
                 cls_id = int(box.cls[0])
-                conf = float(box.conf[0])
                 
-                label_name = str(cls_id) # Mặc định là số (string)
-                
+                label_name = str(cls_id)
                 if self.class_mapping:
-                    # Ưu tiên 1: Tra cứu từ Class Mapping (Sửa lỗi ONNX)
                     label_name = self.class_mapping.get(cls_id, str(cls_id))
                 elif hasattr(self.model, 'names'):
-                    # Ưu tiên 2: Lấy từ nội tại Model (Nếu dùng .pt)
                     label_name = self.model.names.get(cls_id, str(cls_id))
                 
                 detected_labels.append(label_name)
@@ -116,25 +111,26 @@ class ImageFilter:
         # Có nhãn, kiểm tra xem có nằm trong các class requirement không ?
         intersect = unique_labels.intersection(targets_to_check)
 
-        if intersect:
-            # Có ít nhất 1 nhãn mục tiêu -> GIỮ LẠI
-            is_valid_result = bool(intersect) # True nếu có giao nhau
-            action_result = "KEEP" if is_valid_result else "DISCARD"
-            
-            # Gọi hàm log cho trường hợp đã detect ra (Dù KEEP hay DISCARD đều log hết)
-            self._log_to_mongo(
-                metadata=metadata,
-                image_bytes=image_bytes,
-                detected_labels=list(unique_labels),
-                is_valid=is_valid_result,
-                action=action_result,
-                reason="Filtered by Target Classes"
-            )
+        is_valid_result = bool(intersect) # True nếu có giao nhau, False nếu không
+        action_result = "KEEP" if is_valid_result else "DISCARD"
+        
+        # Ghi log (Dù là chó, mèo hay điện thoại đều được ghi lại hết)
+        self._log_to_mongo(
+            metadata=metadata,
+            image_bytes=image_bytes,
+            detected_labels=list(unique_labels),
+            is_valid=is_valid_result,
+            action=action_result,
+            reason="Filtered by Target Classes"
+        )
+        
+        # Update thống kê (chỉ cộng nếu là target)
+        if is_valid_result:
+            for label in intersect:
+                if label in self.stats:
+                    self.stats[label] += 1
 
-            return is_valid_result, list(unique_labels)
-        else:
-            # Có nhãn nhưng không thuộc các class requirement -> bỏ
-            return False, list(unique_labels)
+        return is_valid_result, list(unique_labels)
 
     def _log_to_mongo(self, metadata, image_bytes, detected_labels=None, is_valid=False, action="DISCARD", reason=None):
         """
