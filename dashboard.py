@@ -9,7 +9,6 @@ import time
 from PIL import Image #type:ignore
 from datetime import datetime, timedelta, time
 load_dotenv()
-BASE_URL = os.getenv("API_BASE_URL", "http://localhost:8000")
 st.set_page_config(page_title="AI Image Filter Dashboard", layout="wide", page_icon="🕵️")
 
 # Cấu hình kết nối API local
@@ -17,9 +16,6 @@ st.set_page_config(page_title="AI Image Filter Dashboard", layout="wide", page_i
 
 # default_api_url = "http://api:8000/v1/filter"
 # API_URL = os.getenv("API_URL", "http://localhost:8000/v1/filter")
-if BASE_URL.endswith("/"):
-    BASE_URL = BASE_URL[:-1]
-API_URL = f"{BASE_URL}/v1/filter"
 # Cấu hình kết nối MongoDB (Cho Tab Thống kê)
 MONGO_URI = os.getenv("MONGO_URI")
 DB_NAME = "api_request_log"
@@ -45,8 +41,8 @@ if cloud_url:
     BASE_URL = cloud_url
     st.sidebar.success(f"🟢 Đã kết nối API: {BASE_URL.split('//')[1]}")
 else:
-    # 2. Fallback về cấu hình mặc định hoặc Local
-    BASE_URL = os.getenv("API_BASE_URL", "http://localhost:8000")
+    # Cấu hình mặc định hoặc Local
+    BASE_URL = "http://localhost:8000"
     st.sidebar.warning("⚠️ Không tìm thấy URL từ Mongo, đang dùng Default.")
 
 if BASE_URL.endswith("/"): 
