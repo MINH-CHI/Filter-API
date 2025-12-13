@@ -1,7 +1,7 @@
 API_KEYS = {
-    "Data_team_uv9uy8XMjD72haaScPRGOcunTP1HBWhh": "Sếp khánh",
-    "Data_team_ZzV5H8QqLKj97hp0KpvsTX27fnp4bTsH": "Anh Khôi",
-    "AI_team_4lT5sTNrfvcSDQ4HaC8DufiKZM1ZdUgn": "Vương",
-    "AI_team_WBdUXwNJZbwp5Qrtq9Q5eO6TnNz9D0g6": "Mạnh",
-    "Data_team_0wq7A7t475wWCwz2Frjsee4Nmlop6BlT": "Minh",
+    "Data_team_GtC1dfqgIVxlHHMYIXJbtuoBx3Fev2bx": "Sếp khánh",
+    "Data_team_pvOkPd0SSW7ZcGpL0WgcDebdrMLmBaUo": "Anh Khôi",
+    "AI_team_4DYxF47vZLEeYhjaUCMIw32xL1zUNTOv": "Vương",
+    "AI_team_e24YOA3RQnYsUnOiH2h5Kg1zX5AJhXmm": "Mạnh",
+    "Data_team_7sut9mm7S8G9hwdQa5mzsLU13Ga7UEDR": "Minh",
 }
