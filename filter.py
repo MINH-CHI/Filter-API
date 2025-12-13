@@ -5,7 +5,7 @@ from pymongo import MongoClient, errors  #type: ignore
 from bson.binary import Binary #type: ignore
 from ultralytics import YOLO #type: ignore
 from datetime import datetime
-from bson.binary import Binary
+from bson.binary import Binary #type: ignore
 class ImageFilter:
     def __init__(self, model_path, mongo_uri, db_name, collection_name,target_classes, enable_filter = True, device=0,class_mapping=None):
         self.class_mapping = class_mapping  
