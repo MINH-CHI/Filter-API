@@ -18,7 +18,7 @@ API_URL = os.getenv("API_URL", "http://localhost:8000/v1/filter")
 # Cấu hình kết nối MongoDB (Cho Tab Thống kê)
 MONGO_URI = os.getenv("MONGO_URI")
 DB_NAME = "api_request_log"
-COLLECTION_NAME = "consumer_logs" 
+COLLECTION_NAME = "api_unlabeled_images" 
 
 with st.sidebar:
     st.image("https://cdn-icons-png.flaticon.com/512/2593/2593491.png", width=50)

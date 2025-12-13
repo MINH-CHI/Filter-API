@@ -12,7 +12,7 @@ from starlette.status import HTTP_403_FORBIDDEN  #type:ignore
 
 MODEL_PATH = os.getenv("MODEL_PATH", "finetuned_nc126_best_mAP.onnx")
 MONGO_URI = os.getenv("MONGO_URI")
-DB_NAME = "consumer_logs" 
+DB_NAME = "api_request_log" 
 COLLECTION_NAME = "api_unlabeled_images"
 TARGET_CLASSES = ["smartphone", "pen", "note paper","t-shirt","smartwatch","glasses","bracelet","dishwasher","cabinet","sofa","box cutter","shoes","table","scissor","paper"]
 CLASS_MAPPING = {
