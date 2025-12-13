@@ -6,6 +6,7 @@ import pymongo #type:ignore
 import os
 import time
 from PIL import Image #type:ignore
+from datetime import datetime, timedelta, time
 
 st.set_page_config(page_title="AI Image Filter Dashboard", layout="wide", page_icon="🕵️")
 
@@ -19,38 +20,75 @@ MONGO_URI = os.getenv("MONGO_URI")
 DB_NAME = "api_request_log"
 COLLECTION_NAME = "consumer_logs" 
 
+with st.sidebar:
+    st.image("https://cdn-icons-png.flaticon.com/512/2593/2593491.png", width=50)
+    st.title("Cấu hình")
+    
+    # 🔐 INPUT API KEY TẠI ĐÂY
+    api_key = st.text_input("🔑 Nhập API Key", type="password", help="Nhập key từ file secrets_config.py")
+    st.divider()
+    st.header("📅 Bộ lọc thời gian")
+    # Mặc định chọn 3 ngày gần nhất cho nhẹ
+    today = datetime.now()
+    default_start = today - timedelta(days=3)
+    
+    start_date = st.date_input("Từ ngày", value=default_start)
+    end_date = st.date_input("Đến ngày", value=today)
+    
+    if start_date > end_date:
+        st.error("Ngày bắt đầu phải nhỏ hơn ngày kết thúc!")
+        
+    st.info(f"API URL: `{API_URL}`")
 @st.cache_resource
 def init_mongo_connection():
     try:
+        if not MONGO_URI:
+            return None
         client = pymongo.MongoClient(MONGO_URI, serverSelectionTimeoutMS=2000)
         client.server_info() # Check kết nối
         return client
-    except Exception:
+    except Exception as e:
+        print(f"Mongo Error: {e}")
         return None
 
-def load_logs():
+def load_logs(start_date, end_date):
     client = init_mongo_connection()
     if not client:
         return None
     db = client[DB_NAME]
     collection = db[COLLECTION_NAME]
+    start_dt = datetime.combine(start_date, time.min) 
+    end_dt = datetime.combine(end_date, time.max)
+    query = {
+        "timestamp": {
+            "$gte": start_dt, # Greater than or equal (Lớn hơn hoặc bằng)
+            "$lte": end_dt    # Less than or equal (Nhỏ hơn hoặc bằng)
+        }
+    }
     # Lấy 1000 record mới nhất
-    data = list(collection.find().sort("timestamp", -1).limit(1000))
+    data = list(collection.find().sort("timestamp", -1))
+    
     if not data:
         return pd.DataFrame()
+    
     df = pd.DataFrame(data)
+    
+    # Chuẩn hóa thời gian
     if 'timestamp' in df.columns:
         df['timestamp'] = pd.to_datetime(df['timestamp'])
+        
     return df
 
 st.title("🕵️ Hệ thống Kiểm soát & Lọc Ảnh AI")
-
+if not api_key:
+    st.warning("⚠️ Vui lòng nhập **API Key** ở thanh bên trái (Sidebar) để bắt đầu sử dụng.")
+    st.stop()
 
 tab1, tab2 = st.tabs(["🚀 Dùng thử (Demo)", "📊 Thống kê (Analytics)"])
 
 with tab1:
-    st.header("Test Model AI (Gọi API)")
-    st.write("Upload ảnh để kiểm tra xem AI có nhận diện đúng không.")
+    st.header("Test Model AI")
+    st.write("Upload ảnh để kiểm tra xem AI nhận diện và bộ lọc hoạt động như thế nào.")
 
     col1, col2 = st.columns([1, 1])
     
@@ -58,103 +96,126 @@ with tab1:
         uploaded_file = st.file_uploader("Chọn ảnh (JPG, PNG)", type=['jpg', 'png', 'jpeg'])
         
         if uploaded_file:
-            # Hiển thị ảnh vừa chọn
+            # Hiển thị ảnh
             image = Image.open(uploaded_file)
             st.image(image, caption="Ảnh gốc", use_container_width=True)
             
             # Nút gọi API
             if st.button("🔍 Quét ngay", type="primary"):
-                with st.spinner('Đang gửi sang API xử lý...'):
+                with st.spinner('Đang gửi request kèm API Key...'):
                     try:
-                        # Reset con trỏ file về đầu để đọc bytes
+                        # Reset file pointer
                         uploaded_file.seek(0)
+                        
                         files = {'file': uploaded_file}
-                        data = {'source': 'streamlit_demo'}
+                        data = {'source': 'streamlit_dashboard'}
+                        
+                        # 🔐 THÊM HEADER AUTHENTICATION
+                        headers = {'x-api-key': api_key}
                         
                         # GỌI API
-                        response = requests.post(API_URL, files=files, data=data)
+                        response = requests.post(API_URL, files=files, data=data, headers=headers)
                         
                         if response.status_code == 200:
                             result = response.json()
                             
-                            # Hiển thị kết quả bên cột 2
                             with col2:
-                                st.subheader("Kết quả từ API:")
-                                if result['action'] == 'KEEP':
+                                st.subheader("Kết quả AI:")
+                                
+                                # Logic hiển thị mới dựa trên 'action'
+                                action = result.get('action', 'UNKNOWN')
+                                
+                                if action == 'KEEP':
                                     st.success(f"✅ HỢP LỆ (KEEP)")
                                     st.balloons()
-                                else:
+                                elif action == 'DISCARD':
                                     st.error(f"❌ LOẠI BỎ (DISCARD)")
+                                else:
+                                    st.warning(f"⚠️ {action}")
                                 
+                                st.write(f"**Người dùng:** {result.get('user', 'Unknown')}")
                                 st.write("**Vật thể phát hiện:**")
                                 st.write(result.get('detected_labels', []))
                                 
-                                with st.expander("Xem JSON thô"):
+                                with st.expander("Xem JSON phản hồi"):
                                     st.json(result)
+                                    
+                        elif response.status_code == 403:
+                            st.error("⛔ BỊ TỪ CHỐI! API Key không đúng hoặc không có quyền.")
                         else:
                             st.error(f"Lỗi API ({response.status_code}): {response.text}")
                             
                     except requests.exceptions.ConnectionError:
-                        st.error("⚠️ Không thể kết nối tới API! Bạn đã bật server 'main.py' chưa?")
+                        st.error("⚠️ Không thể kết nối tới API! Server có đang bật không?")
                     except Exception as e:
-                        st.error(f"Lỗi: {e}")
+                        st.error(f"Lỗi không xác định: {e}")
 
 with tab2:
     st.header("Thống kê dữ liệu Log")
-    col_control_1, col_control_2 = st.columns([1, 4])
     
-    with col_control_1:
-        # Nút gạt bật tắt chế độ tự động
-        auto_refresh = st.toggle("🔴 Chế độ Live (5s)", value=False)
+    col_ctrl1, col_ctrl2 = st.columns([1, 4])
+    with col_ctrl1:
+        auto_refresh = st.toggle("🔴 Live (5s)", value=False)
+    with col_ctrl2:
+        if st.button("🔄 Làm mới"): st.rerun()
         
-    with col_control_2:
-        if st.button("🔄 Làm mới ngay lập tức"):
-            st.rerun()
-        
-    df = load_logs()
+    # --- GỌI HÀM VỚI THAM SỐ NGÀY TỪ SIDEBAR ---
+    df = load_logs(start_date, end_date)
     
     if df is None:
-        st.warning("⚠️ Không thể kết nối MongoDB. Hãy kiểm tra lại chuỗi kết nối MONGO_URI trong code.")
+        st.error("❌ Lỗi kết nối MongoDB")
     elif df.empty:
-        st.info("Chưa có dữ liệu log nào trong Database.")
+        st.info(f"📭 Không có dữ liệu nào từ ngày {start_date} đến {end_date}.")
     else:
-        # KPI Cards
+        # Chuẩn hóa cột
+        for col in ['action', 'detected_labels', 'user']:
+            if col not in df.columns: df[col] = None
+            
+        # Metrics
         total = len(df)
-        kept = len(df[df['status'] == 'KEEP']) if 'status' in df.columns else 0
-        keep_rate = (kept/total * 100) if total > 0 else 0
+        kept = len(df[df['action'] == 'KEEP'])
+        discarded = len(df[df['action'] == 'DISCARD'])
+        rate = (kept/total*100) if total else 0
         
-        c1, c2, c3 = st.columns(3)
-        c1.metric("Tổng ảnh đã quét", total)
-        c2.metric("Ảnh hợp lệ (KEEP)", kept)
-        c3.metric("Tỷ lệ đạt chuẩn", f"{keep_rate:.1f}%")
+        m1, m2, m3, m4 = st.columns(4)
+        m1.metric("Tổng Request (Range)", total)
+        m2.metric("✅ Clean", kept)
+        m3.metric("🗑️ Spam", discarded)
+        m4.metric("Tỷ lệ sạch", f"{rate:.1f}%")
         
         st.divider()
         
-        # Biểu đồ
-        chart1, chart2 = st.columns(2)
-        
-        with chart1:
-            if 'status' in df.columns:
-                st.subheader("Tỷ lệ Sàng lọc")
-                fig_pie = px.pie(df, names='status', color='status', 
-                                color_discrete_map={'KEEP':'green', 'DISCARD':'red'})
-                st.plotly_chart(fig_pie, use_container_width=True)
-                
-        with chart2:
-            if 'detected_classes' in df.columns:
-                st.subheader("Top vật thể phát hiện")
-                exploded_df = df.explode('detected_classes').dropna(subset=['detected_classes'])
-                if not exploded_df.empty:
-                    top_classes = exploded_df['detected_classes'].value_counts().head(10).reset_index()
-                    top_classes.columns = ['Class', 'Count']
-                    fig_bar = px.bar(top_classes, x='Count', y='Class', orientation='h', text_auto=True)
-                    st.plotly_chart(fig_bar, use_container_width=True)
-                else:
-                    st.write("Chưa có dữ liệu vật thể.")
-                    
-        # Bảng dữ liệu
-        st.subheader("Lịch sử chi tiết")
-        st.dataframe(df, use_container_width=True)
+        # Charts
+        c1, c2 = st.columns(2)
+        with c1:
+            st.subheader("Tỷ lệ Lọc")
+            fig = px.pie(df, names='action', color='action', 
+                         color_discrete_map={'KEEP':'green', 'DISCARD':'red', 'UNKNOWN':'gray'})
+            st.plotly_chart(fig, use_container_width=True)
+            
+        with c2:
+            st.subheader("Top Users")
+            if 'user' in df.columns:
+                u_counts = df['user'].value_counts().reset_index()
+                u_counts.columns = ['User', 'Count']
+                fig_u = px.bar(u_counts, x='User', y='Count', color='User', text_auto=True)
+                st.plotly_chart(fig_u, use_container_width=True)
+
+        # Top Objects
+        st.subheader("🔍 Top Vật thể phát hiện")
+        exploded = df.explode('detected_labels').dropna(subset=['detected_labels'])
+        if not exploded.empty:
+            top_obj = exploded['detected_labels'].value_counts().head(15).reset_index()
+            top_obj.columns = ['Object', 'Count']
+            fig_bar = px.bar(top_obj, x='Count', y='Object', orientation='h', 
+                             text_auto=True, color='Count')
+            fig_bar.update_layout(yaxis=dict(autorange="reversed"))
+            st.plotly_chart(fig_bar, use_container_width=True)
+            
+        # Dataframe
+        st.subheader("📄 Chi tiết Log")
+        display_cols = ['timestamp', 'user', 'filename', 'action', 'detected_labels']
+        st.dataframe(df[[c for c in display_cols if c in df.columns]], use_container_width=True)
     if auto_refresh:
         time.sleep(5) # Đợi 5 giây
         st.rerun()
