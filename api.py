@@ -43,7 +43,26 @@ CLASS_MAPPING = {
     120: 'mini stapler', 121: 'calendar', 122: 'eraser', 123: 'calender', 124: 'wall calendar',
     125: 'cellq'
 }
-app = FastAPI(title="Image Filter API",description="API đánh nhãn và lọc ảnh tự động sử dụng YOLO.",version="1.0.0")
+description_text = """
+**API đánh nhãn và lọc ảnh tự động sử dụng YOLO.**
+
+---
+### 📖 Hướng dẫn sử dụng (Quick Start)
+
+Hệ thống yêu cầu **API Key** để bảo mật. Vui lòng làm theo các bước sau để test:
+
+1. **Bước 1:** Bấm nút **Authorize** (biểu tượng ổ khóa 🔓) ở góc phải.
+2. **Bước 2:** Nhập API Key của bạn vào ô `value`.
+    * *Ví dụ:* `data_team_sk_123456...`
+3. **Bước 3:** Bấm **Authorize** -> **Close**.
+4. **Bước 4:** Chọn endpoint `/v1/filter` bên dưới -> Bấm **Try it out** để upload ảnh.
+
+---
+### ⚠️ Quy định kỹ thuật (Cho Team Data)
+* **Kích thước ảnh:** Vui lòng resize về cạnh dài max **1024px** hoặc **640px** trước khi gửi.
+* **Concurrency:** Tối đa **2 luồng** (threads) đồng thời để tránh quá tải GPU.
+"""
+app = FastAPI(title="Image Filter API",description=description_text,version="1.0.0",contact={"name": "Minh Admin","email": "minhchitran12345678910@gmail.com",})
 api_key_header = APIKeyHeader(name="x-api-key", auto_error=False)
 
 # Hàm kiểm tra Key
