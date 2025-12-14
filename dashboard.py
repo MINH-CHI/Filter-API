@@ -52,11 +52,10 @@ with st.sidebar:
     st.image("https://cdn-icons-png.flaticon.com/512/2593/2593491.png", width=50)
     st.title("Cấu hình")
     
-    # 🔐 INPUT API KEY TẠI ĐÂY
+    # Input API Key
     api_key = st.text_input("🔑 Nhập API Key", type="password", help="Nhập key từ file secrets_config.py")
     st.divider()
     st.header("📅 Bộ lọc thời gian")
-    # Mặc định chọn 3 ngày gần nhất cho nhẹ
     today = datetime.now()
     default_start = today - timedelta(days=3)
     
@@ -138,7 +137,7 @@ with tab1:
                         files = {'file': uploaded_file}
                         data = {'source': 'streamlit_dashboard'}
                         
-                        # 🔐 THÊM HEADER AUTHENTICATION
+                        # Headers với API Key
                         headers = {'x-api-key': api_key}
                         
                         # GỌI API
@@ -198,7 +197,6 @@ with tab2:
     with col_ctrl2:
         if st.button("🔄 Làm mới"): st.rerun()
         
-    # --- GỌI HÀM VỚI THAM SỐ NGÀY TỪ SIDEBAR ---
     df = load_logs(start_date, end_date)
     
     if df is None:
@@ -264,7 +262,7 @@ with tab3:
     Upload file kết quả từ script `batch_test.py` để phân tích độ tin cậy (Confidence) và các trường hợp sai sót.
     """)
 
-    # 1. Nguồn dữ liệu: Tự tìm file hoặc Upload
+    # Nguồn dữ liệu
     uploaded_file = st.file_uploader("Chọn file Excel kết quả (test_results_1000.xlsx)", type=['xlsx'])
     
     # Tự động tìm file nếu có sẵn ở server
@@ -278,9 +276,9 @@ with tab3:
         st.info(f"Đã tìm thấy file `{default_file}` trên server. Đang load...")
         df_batch = pd.read_excel(default_file)
     
-    # 2. Hiển thị Dashboard phân tích
+    # Hiển thị Dashboard phân tích
     if df_batch is not None:
-        # --- CẤU HÌNH NGƯỠNG PASS ---
+        # Config ngưỡng pass
         col_conf1, col_conf2 = st.columns([1, 3])
         with col_conf1:
             threshold = st.slider("Ngưỡng Pass Confidence", 0.0, 1.0, 0.90, 0.05)
@@ -303,7 +301,7 @@ with tab3:
         
         st.divider()
         
-        # --- BIỂU ĐỒ 1: PHÂN PHỐI CONFIDENCE (QUAN TRỌNG NHẤT) ---
+        # Bảng phân phối Confidence
         st.subheader("1. Biểu đồ Phân phối Độ tin cậy (Confidence Distribution)")
         st.caption("Biểu đồ này cho biết Model đang 'tự tin' hay 'lưỡng lự'. Càng lệch về bên phải (1.0) càng tốt.")
         
@@ -320,7 +318,7 @@ with tab3:
         fig_hist.add_vline(x=threshold, line_width=3, line_dash="dash", line_color="red")
         st.plotly_chart(fig_hist, use_container_width=True)
 
-        # --- BIỂU ĐỒ 2: CHI TIẾT THEO LOẠI ---
+        # Biểu đồ Pass theo nhóm dữ liệu
         c1, c2 = st.columns(2)
         with c1:
             st.subheader("2. Tỷ lệ Pass theo nhóm dữ liệu")
@@ -348,7 +346,7 @@ with tab3:
             fig_scatter.add_hline(y=threshold, line_dash="dash", line_color="red")
             st.plotly_chart(fig_scatter, use_container_width=True)
 
-        # --- DANH SÁCH CẦN REVIEW (Failed Cases) ---
+        # Danh sách Fail Cases
         st.subheader("⚠️ Danh sách các ca cần đánh giá lại (Fail Cases)")
         st.write(f"Dưới đây là các ảnh có Confidence < {threshold}. Bạn hãy kiểm tra xem tại sao.")
         
@@ -363,10 +361,10 @@ with tab3:
         
         with st.expander("💡 Gợi ý xử lý"):
             st.markdown("""
-            * **Nếu Type = 'imbalance' và Conf thấp:** Model chưa học đủ góc độ này -> **Gửi Team AI train thêm.**
+            * **Nếu Type = 'imbalance' và Conf thấp:** Model chưa học đủ góc độ này -> **Train thêm.**
             * **Nếu Type = 'valid' và Conf thấp:** Ảnh có thể bị mờ, nhiễu hoặc Model nhận diện kém -> **Cần kiểm tra kỹ.**
             * **Nếu Type = 'unknown' mà Conf CAO (False Positive):** Nguy hiểm! Model đang nhận nhầm rác thành vật thể -> **Cần chỉnh lại Threshold hoặc train thêm class background.**
             """)
 
     else:
-        st.warning("⚠️ Chưa có dữ liệu. Hãy chạy script `batch_test.py` trước, sau đó upload file Excel vào đây.")
+        st.warning("⚠️ Chưa có dữ liệu")
