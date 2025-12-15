@@ -13,7 +13,7 @@ from google_auth_oauthlib.flow import InstalledAppFlow # type:ignore
 from googleapiclient.discovery import build # type:ignore
 from googleapiclient.http import MediaIoBaseDownload # type:ignore
 load_dotenv()
-API_URL = "https://types-prep-visible-hat.trycloudflare.com/v1/filter"
+API_URL = "https://dir-doe-pursuant-price.trycloudflare.com/v1/filter"
 API_KEY = os.getenv("API_KEY")
 DRIVE_BASE_FOLDER_NAME = "DATA"
 DRIVE_SUB_FOLDER_NAME = "object_detection"
@@ -218,7 +218,7 @@ def run_test():
         collection.insert_one(result_record)
         
         # Sleep nhẹ
-        time.sleep(0.5)
+        time.sleep(10)
 
     print("✅ Đã hoàn thành test.")
 if __name__ == "__main__":
