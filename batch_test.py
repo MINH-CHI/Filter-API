@@ -141,84 +141,111 @@ def build_task_list(service):
 def run_test():
     print("🚀 Bắt đầu Script Batch Test...")
     
-    # 1. Kết nối Mongo & Xóa dữ liệu cũ (để Dashboard sạch sẽ)
     collection = get_mongo_collection()
-    # print("🧹 Đang dọn dẹp dữ liệu test cũ trên MongoDB...")
-    # collection.delete_many({}) # Xóa sạch collection test cũ
-    
-    # 2Kết nối Drive
+    # Tùy chọn: Xóa dữ liệu cũ nếu muốn chạy lại từ đầu
+    # collection.delete_many({"source": "batch_script_runner"})
+
     service = get_drive_service()
-    if not service: 
-        return
+    if not service: return
 
-    # Quét task
-    print("🔄 Đang quét ảnh từ Drive...")
     tasks = build_task_list(service)
-    print(f"📋 Tìm thấy {len(tasks)} ảnh.")
+    print(f"📋 Tổng số ảnh cần test: {len(tasks)}")
 
-    # 4. Chạy vòng lặp xử lý
-    for i, task in enumerate(tqdm(tasks, desc="Processing")):
+    # Giảm thời gian sleep xuống 2s để chạy nhanh hơn (nếu API chịu tải được)
+    SLEEP_TIME = 2 
+
+    for i, task in enumerate(tqdm(tasks, desc="Đang xử lý")):
         filename = task['filename']
         actual = task['actual_label']
         
-        # Tải ảnh
-        img_bytes = download_file_bytes(service, task['file_id'])
-        
+        # Chuẩn bị Record mặc định
         result_record = {
             "timestamp": datetime.now(),
             "filename": filename,
             "actual_label": actual,
             "type": task['category_type'],
-            "status": "Processing..."
+            "status": "Processing",
+            "source": "batch_script_runner" # Đánh dấu để dễ lọc trên Dashboard
         }
 
+        # Tải ảnh từ Drive
+        img_bytes = download_file_bytes(service, task['file_id'])
+        
         if img_bytes:
             try:
                 files = {"file": (filename, img_bytes, 'image/jpeg')}
-                data = {"source": "batch_script_runner"}
+                data = {"source": "batch_test"} # Gửi thêm metadata nếu cần
                 headers = {"x-api-key": API_KEY}
                 
-                # Gọi API
-                resp = requests.post(API_URL, files=files, data=data, headers=headers)
+                # 3. GỌI API
+                resp = requests.post(API_URL, files=files, data=data, headers=headers, timeout=30)
                 
                 if resp.status_code == 200:
                     res_json = resp.json()
-                    detections = res_json.get("detections", [])
                     
-                    if detections:
-                        best = sorted(detections, key=lambda x: x['confidence'], reverse=True)[0]
-                        pred = best['object']
-                        conf = best['confidence']
-                    else:
-                        pred = "None"
-                        conf = 0.0
+                    # Lấy Labels
+                    detected_labels = res_json.get("detected_labels", [])
+                    if isinstance(detected_labels, str): # Phòng hờ API trả về string thay vì list
+                        detected_labels = [detected_labels]
                     
-                    # Logic Check
-                    is_correct = False
-                    if task['category_type'] == "unknown":
-                        is_correct = (pred == "None")
+                    # Lấy Confidence (Xử lý an toàn cho cả số và mảng)
+                    raw_conf = res_json.get("confidence", 0.0)
+                    final_conf = 0.0
+                    
+                    if isinstance(raw_conf, list):
+                        # Nếu là list, lấy max hoặc trung bình (ở đây lấy max)
+                        if len(raw_conf) > 0:
+                            final_conf = max([float(c) for c in raw_conf if isinstance(c, (int, float))])
                     else:
-                        is_correct = str(actual).lower() in str(pred).lower()
+                        try:
+                            final_conf = float(raw_conf)
+                        except:
+                            final_conf = 0.0
 
-                    # Cập nhật record
+                    action = res_json.get("action", "UNKNOWN")
+
+                    # Nối mảng thành chuỗi để lưu vào DB
+                    pred_str = ", ".join(detected_labels) if detected_labels else "None"
+                    
+                    is_correct = False
+                    # Folder là "unknown" thì đúng nếu AI không detect ra gì (hoặc DISCARD)
+                    if task['category_type'].lower() == "unknown":
+                        is_correct = (not detected_labels) or (action == "DISCARD")
+                    else:
+                        #  Kiểm tra nhãn thực tế có nằm trong danh sách AI detect không
+                        # Chuẩn hóa về lower case để so sánh
+                        actual_norm = str(actual).lower().strip()
+                        
+                        # Check xem actual có xuất hiện trong bất kỳ nhãn nào detected không
+                        for lbl in detected_labels:
+                            if actual_norm in str(lbl).lower():
+                                is_correct = True
+                                break
+                    
+                    # Update kết quả vào Record
                     result_record.update({
-                        "predicted_label": pred,
-                        "confidence": conf,
+                        "predicted_label": pred_str, # Lưu chuỗi các nhãn
+                        "confidence": final_conf,
+                        "action": action,
                         "is_correct": is_correct,
+                        "detected_labels": detected_labels, # Lưu cả mảng gốc nếu cần query sau này
                         "status": "Done"
                     })
+                    
                 else:
                     result_record["status"] = f"API Error {resp.status_code}"
+                    print(f"\nAPI Error: {resp.text}")
+
             except Exception as e:
-                result_record["status"] = f"Error: {str(e)}"
+                result_record["status"] = f"Code Error: {str(e)}"
         else:
             result_record["status"] = "Download Failed"
 
-        # QUAN TRỌNG: Ghi ngay vào MongoDB
+        # 5. Insert vào Mongo
         collection.insert_one(result_record)
-        
-        # Sleep nhẹ
         time.sleep(10)
+
+    print("✅ Đã hoàn thành test.")
 
     print("✅ Đã hoàn thành test.")
 if __name__ == "__main__":

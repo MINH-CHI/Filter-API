@@ -106,10 +106,10 @@ def load_test_results():
         return pd.DataFrame()
     db = client[DB_NAME]
     collection = db[COLLECTION_NAME] 
-    
+    query = {"source": "batch_script_runner"}
     try:
         # Lấy 500 record mới nhất
-        data = list(collection.find().sort("timestamp", -1).limit(500))
+        data = list(collection.find(query).sort("timestamp", -1).limit(500))
         return pd.DataFrame(data)
     except Exception:
         return pd.DataFrame()
@@ -265,71 +265,98 @@ with tab2:
         st.rerun()
 with tab3:
     st.header("🧪 Giám sát Batch Test (Real-time)")
-    st.info("💡 Hướng dẫn: Chạy script `python batch_test.py` ở terminal. Dashboard này sẽ tự cập nhật kết quả tại đây.")
+    st.markdown("""
+    > **Trạng thái:** Đang hiển thị dữ liệu từ script `batch_test.py`.
+    > Dashboard tự động lọc các request có `source="batch_script_runner"`.
+    """)
 
-    # Nút refresh thủ công và Auto-refresh
-    col_re1, col_re2 = st.columns([1, 5])
+    # 1. Controls
+    col_re1, col_re2, col_re3 = st.columns([1, 1, 4])
     with col_re1:
-        auto_refresh_tab3 = st.toggle("🔴 Auto-Refresh (2s)", value=True)
+        auto_refresh_tab3 = st.toggle("🔴 Auto-Refresh", value=True, key="tab3_live")
     with col_re2:
-        if st.button("🔄 Làm mới ngay"): st.rerun()
+        if st.button("🗑️ Xóa Log Test", type="primary", key="btn_clear_test"):
+            # Nút tiện ích để dọn dẹp DB
+            client = init_mongo_client()
+            if client:
+                client[DB_NAME][COLLECTION_NAME].delete_many({"source": "batch_script_runner"})
+                st.toast("Đã xóa sạch dữ liệu test cũ!", icon="🧹")
+                time.sleep(1)
+                st.rerun()
+    with col_re3:
+        if st.button("🔄 Làm mới", key="btn_reload_tab3"):
+            st.rerun()
 
-    # Load dữ liệu từ Mongo
-    df_live = load_test_results()
-    # df_live = load_logs(start_date, end_date)
+    # 2. Load Data
+    df_test = load_test_results()
 
-    if df_live.empty:
-        st.warning("⚠️ Chưa có dữ liệu test nào đang chạy. Hãy chạy script `batch_test.py`.")
+    if df_test.empty:
+        st.warning("⚠️ Chưa tìm thấy dữ liệu Test. Hãy chạy lệnh `python batch_test.py` ở terminal.")
     else:
-        # Tính toán Metrics
-        total = len(df_live)
-        processed = len(df_live[df_live['status'] == 'Done'])
+        # Đảm bảo các cột tồn tại để không lỗi
+        expected_cols = ['is_correct', 'action', 'predicted_label', 'actual_label', 'confidence', 'filename']
+        for c in expected_cols:
+            if c not in df_test.columns: df_test[c] = None
+
+        # 3. Metrics
+        total_test = len(df_test)
         
-        # Metrics Accuracy
-        if 'is_correct' in df_live.columns:
-            valid_df = df_live[df_live['status'] == 'Done']
-            correct = valid_df['is_correct'].sum()
-            acc = (correct / len(valid_df) * 100) if not valid_df.empty else 0.0
-        else:
-            acc = 0.0
+        # Tính Accuracy (is_correct = True)
+        correct_count = df_test['is_correct'].sum() # True = 1, False = 0
+        acc_val = (correct_count / total_test * 100) if total_test > 0 else 0.0
+        
+        # Tính tỷ lệ KEEP (Hợp lệ)
+        keep_count = len(df_test[df_test['action'] == 'KEEP'])
+        
+        k1, k2, k3, k4 = st.columns(4)
+        k1.metric("Số mẫu đã Test", total_test)
+        k2.metric("Độ chính xác (Accuracy)", f"{acc_val:.1f}%", help="Dựa trên logic khớp nhãn Actual vs Detected")
+        k3.metric("Số ảnh Hợp lệ (KEEP)", keep_count)
+        k4.metric("Trạng thái mới nhất", df_test.iloc[0]['status'] if 'status' in df_test.columns else "N/A")
 
-        # Hiển thị KPI
-        k1, k2, k3 = st.columns(3)
-        k1.metric("Số lượng ảnh đã xử lý", f"{total}", delta="Live Update")
-        k2.metric("Độ chính xác (Accuracy)", f"{acc:.2f}%")
-        k3.metric("Trạng thái mới nhất", df_live.iloc[0]['status'] if not df_live.empty else "N/A")
+        st.divider()
 
-        # Hiển thị thanh tiến trình (Giả lập hoặc tính nếu biết tổng)
-        st.progress(min(processed % 100, 100) / 100) 
-
-        # Layout 2 cột: Bảng dữ liệu & Biểu đồ
+        # 4. Charts & Table Layout
         c1, c2 = st.columns([2, 1])
         
         with c1:
-            st.subheader("📋 Bảng kết quả chi tiết")
-            display_cols = ['timestamp', 'filename', 'actual_label', 'predicted_label', 'confidence', 'is_correct']
-            # Hiển thị cột có sẵn
-            cols_to_show = [c for c in display_cols if c in df_live.columns]
-            st.dataframe(df_live[cols_to_show], height=400, use_container_width=True)
+            st.subheader("📋 Chi tiết từng ảnh")
+            # Highlight màu cho cột is_correct
+            def highlight_correct(val):
+                color = '#d4edda' if val else '#f8d7da' # Xanh nhạt / Đỏ nhạt
+                return f'background-color: {color}'
+
+            display_cols = ['timestamp', 'filename', 'actual_label', 'predicted_label', 'confidence', 'action', 'is_correct']
+            
+            st.dataframe(
+                df_test[[c for c in display_cols if c in df_test.columns]].style.applymap(highlight_correct, subset=['is_correct']),
+                use_container_width=True,
+                height=400
+            )
 
         with c2:
-            st.subheader("📊 Biểu đồ nhanh")
-            if 'is_correct' in df_live.columns and not df_live.empty:
-                counts = df_live['is_correct'].value_counts().reset_index()
-                counts.columns = ['Result', 'Count']
-                counts['Result'] = counts['Result'].map({True: 'Đúng', False: 'Sai'})
-                
-                fig = px.pie(counts, names='Result', values='Count', 
-                             color='Result', color_discrete_map={'Đúng':'green', 'Sai':'red'})
-                st.plotly_chart(fig, use_container_width=True)
-                
-                # Scatter plot Confidence
-                if 'confidence' in df_live.columns:
-                    fig2 = px.scatter(df_live, x='predicted_label', y='confidence', 
-                                      color='is_correct', title="Confidence Distribution")
-                    st.plotly_chart(fig2, use_container_width=True)
+            st.subheader("📊 Phân tích")
+            
+            # Biểu đồ Đúng/Sai
+            res_counts = df_test['is_correct'].value_counts().reset_index()
+            res_counts.columns = ['Kết quả', 'Số lượng']
+            res_counts['Kết quả'] = res_counts['Kết quả'].map({True: 'ĐÚNG (Match)', False: 'SAI (Mismatch)'})
+            
+            fig_acc = px.pie(res_counts, names='Kết quả', values='Số lượng', 
+                           color='Kết quả', 
+                           color_discrete_map={'ĐÚNG (Match)':'green', 'SAI (Mismatch)':'red'},
+                           hole=0.4)
+            st.plotly_chart(fig_acc, use_container_width=True)
 
-    # Logic Auto Refresh
+            # Biểu đồ Action
+            st.write("**Tỷ lệ Keep vs Discard:**")
+            act_counts = df_test['action'].value_counts().reset_index()
+            act_counts.columns = ['Hành động', 'Số lượng']
+            fig_act = px.bar(act_counts, x='Hành động', y='Số lượng', color='Hành động', 
+                             color_discrete_map={'KEEP':'blue', 'DISCARD':'orange'})
+            st.plotly_chart(fig_act, use_container_width=True)
+
+    # Auto Refresh Logic
     if auto_refresh_tab3:
-        time.sleep(15) 
+        time.sleep(15)
         st.rerun()
