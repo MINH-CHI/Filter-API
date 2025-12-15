@@ -8,7 +8,6 @@ from dotenv import load_dotenv #type: ignore
 import time
 from PIL import Image #type:ignore
 from datetime import datetime, timedelta, time
-import batch_test
 load_dotenv()
 st.set_page_config(page_title="AI Image Filter Dashboard", layout="wide", page_icon="🕵️")
 
@@ -269,7 +268,13 @@ with tab3:
         if st.button("🔄 Làm mới ngay"): st.rerun()
 
     # Load dữ liệu từ Mongo
-    df_live = load_logs()
+    client = init_mongo_connection()
+    
+    # Lấy tất cả kết quả test mới nhất
+    # (Có thể thêm limit nếu dữ liệu quá lớn)
+    data = list(client[DB_NAME][COLLECTION_NAME].find().sort("timestamp", -1))
+    
+    df_live = pd.DataFrame(data)
 
     if df_live.empty:
         st.warning("⚠️ Chưa có dữ liệu test nào đang chạy. Hãy chạy script `batch_test.py`.")
