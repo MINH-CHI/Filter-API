@@ -6,14 +6,15 @@ import time
 from datetime import datetime
 from tqdm import tqdm # type:ignore
 from pymongo import MongoClient # type:ignore
+from dotenv import load_dotenv
 from google.auth.transport.requests import Request # type:ignore
 from google.oauth2.credentials import Credentials # type:ignore
 from google_auth_oauthlib.flow import InstalledAppFlow # type:ignore
 from googleapiclient.discovery import build # type:ignore
 from googleapiclient.http import MediaIoBaseDownload # type:ignore
-
+load_dotenv()
 API_URL = "https://types-prep-visible-hat.trycloudflare.com/v1/filter"
-API_KEY = "Data_team_kOH17bVPOEf7kPd6y0YNICNSnZyT5neg"
+API_KEY = os.getenv("API_KEY")
 DRIVE_BASE_FOLDER_NAME = "DATA"
 DRIVE_SUB_FOLDER_NAME = "object_detection"
 DRIVE_VPP_FOLDER_NAME = "classes-do-gia-dung"
