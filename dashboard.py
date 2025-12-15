@@ -7,7 +7,7 @@ import os
 from dotenv import load_dotenv #type: ignore
 from PIL import Image #type:ignore
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, time as dt_time
 load_dotenv()
 st.set_page_config(page_title="AI Image Filter Dashboard", layout="wide", page_icon="🕵️")
 
@@ -84,8 +84,8 @@ def load_logs(start_date, end_date):
         return None
     db = client[DB_NAME]
     collection = db[COLLECTION_NAME]
-    start_dt = datetime.combine(start_date, time.min) 
-    end_dt = datetime.combine(end_date, time.max)
+    start_dt = datetime.combine(start_date, dt_time.min) 
+    end_dt = datetime.combine(end_date, dt_time.max)
     query = {
         "timestamp": {
             "$gte": start_dt, # Greater than or equal (Lớn hơn hoặc bằng)
