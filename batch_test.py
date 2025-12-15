@@ -3,7 +3,7 @@ import io
 import requests # type:ignore
 import pandas as pd # type:ignore
 import time
-from time import datetime
+from datetime import datetime
 from tqdm import tqdm # type:ignore
 from pymongo import MongoClient # type:ignore
 from google.auth.transport.requests import Request # type:ignore
@@ -12,7 +12,7 @@ from google_auth_oauthlib.flow import InstalledAppFlow # type:ignore
 from googleapiclient.discovery import build # type:ignore
 from googleapiclient.http import MediaIoBaseDownload # type:ignore
 
-API_URL = "https://lopez-sec-thanks-nokia.trycloudflare.com/v1/filter"
+API_URL = "https://types-prep-visible-hat.trycloudflare.com/v1/filter"
 API_KEY = "Data_team_kOH17bVPOEf7kPd6y0YNICNSnZyT5neg"
 DRIVE_BASE_FOLDER_NAME = "DATA"
 DRIVE_SUB_FOLDER_NAME = "object_detection"
@@ -142,21 +142,17 @@ def run_test():
     
     # 1. Kết nối Mongo & Xóa dữ liệu cũ (để Dashboard sạch sẽ)
     collection = get_mongo_collection()
-    print("🧹 Đang dọn dẹp dữ liệu test cũ trên MongoDB...")
-    collection.delete_many({}) # Xóa sạch collection test cũ
+    # print("🧹 Đang dọn dẹp dữ liệu test cũ trên MongoDB...")
+    # collection.delete_many({}) # Xóa sạch collection test cũ
     
-    # 2. Kết nối Drive
+    # 2Kết nối Drive
     service = get_drive_service()
-    if not service: return
+    if not service: 
+        return
 
-    # 3. Quét task
-    # (Bạn hãy copy hàm build_task_list vào file này nhé)
-    # tasks = build_task_list(service, DATASET_FOLDER_ID) 
-    # Ở đây tôi giả lập tasks để demo nếu bạn chưa copy hàm
+    # Quét task
     print("🔄 Đang quét ảnh từ Drive...")
-    # --- CHỖ NÀY BẠN GỌI HÀM THẬT CỦA BẠN ---
-    # tasks = build_task_list(service, DATASET_FOLDER_ID)
-    tasks = [] # Placeholder
+    tasks = build_task_list(service)
     print(f"📋 Tìm thấy {len(tasks)} ảnh.")
 
     # 4. Chạy vòng lặp xử lý
