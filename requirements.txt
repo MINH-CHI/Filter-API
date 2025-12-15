@@ -6,7 +6,6 @@ opencv-python-headless
 numpy
 pydantic
 ultralytics
-# Các thư viện hỗ trợ khác
 requests
 python-dotenv
 Pillow
@@ -17,4 +16,9 @@ dnspython
 onnx>=1.14.0
 onnxruntime-gpu
 email-validator
+# Các thư viện cho script test
 tqdm
+google-api-python-client
+google-auth-httplib2
+google-auth-oauthlib
+openpyxl
