@@ -11,17 +11,15 @@ from google_auth_oauthlib.flow import InstalledAppFlow # type:ignore
 from googleapiclient.discovery import build # type:ignore
 from googleapiclient.http import MediaIoBaseDownload # type:ignore
 
-# --- CẤU HÌNH ---
 API_URL = "https://cave-reconstruction-invention-somewhat.trycloudflare.com/v1/filter"
 API_KEY = "Data_team_kOH17bVPOEf7kPd6y0YNICNSnZyT5neg"
-DATASET_FOLDER_ID = "1PlH4I4MMHal4oMFf6aqFnUC8-sOwO60A" # <--- ID folder gốc trên Drive
+DATASET_FOLDER_ID = "1PlH4I4MMHal4oMFf6aqFnUC8-sOwO60A" 
 DRIVE_BASE_FOLDER_NAME = "DATA"
 DRIVE_SUB_FOLDER_NAME = "object_detection"
 DRIVE_VPP_FOLDER_NAME = "classes-do-gia-dung"
 OUTPUT_FILE = "drive_test_results.xlsx"
-TOKEN_FILE = 'token.json' # File lưu token đăng nhập Drive
+TOKEN_FILE = 'token.json' 
 
-# --- 1. CÁC HÀM HELPER GOOGLE DRIVE ---
 def get_drive_service():
     creds = None
     if os.path.exists(TOKEN_FILE):
@@ -80,29 +78,25 @@ def download_file_bytes(service, file_id):
     except Exception:
         return None
 
-# --- 2. HÀM CRAWL CẤU TRÚC FOLDER ---
 def build_task_list(service, root_id):
     tasks = []
     print("🔄 Đang định vị thư mục mục tiêu...")
 
-    # BƯỚC 1: ĐI THEO ĐƯỜNG DẪN CỤ THỂ
-    # Level 1: DATA
     data_id = find_folder_id_by_name(service, DRIVE_BASE_FOLDER_NAME, root_id)
-    if not data_id: return []
+    if not data_id: 
+        return []
 
-    # Level 2: object_detection
     obj_det_id = find_folder_id_by_name(service, DRIVE_SUB_FOLDER_NAME, data_id)
-    if not obj_det_id: return []
+    if not obj_det_id: 
+        return []
 
-    # Level 3: classes-do-gia-dung (Đây là folder chứa các class con)
     target_root_id = find_folder_id_by_name(service, DRIVE_VPP_FOLDER_NAME, obj_det_id)
-    if not target_root_id: return []
+    if not target_root_id: 
+        return []
 
     print(f"✅ Đã vào tới folder đích: {DRIVE_VPP_FOLDER_NAME} (ID: {target_root_id})")
     print("🔄 Đang quét các class con...")
 
-    # BƯỚC 2: LIỆT KÊ CÁC FOLDER CLASS (Vd: noi-com, quat, bep-ga...)
-    # Lấy tất cả folder nằm trong 'classes-do-gia-dung'
     class_folders = []
     page_token = None
     while True:
@@ -117,14 +111,12 @@ def build_task_list(service, root_id):
 
     print(f"📂 Tìm thấy {len(class_folders)} class (nhãn). Đang quét ảnh...")
 
-    # BƯỚC 3: DUYỆT TỪNG CLASS ĐỂ LẤY ẢNH
     for folder in class_folders:
         label_name = folder['name'] # Tên folder chính là nhãn thực tế (Actual Label)
         folder_id = folder['id']
         
         # Lấy danh sách file ảnh trong folder class này
-        # (Sử dụng lại hàm list_all_files_in_folder bạn đã viết, nhưng nhớ filter ảnh)
-        all_files = list_all_files_in_folder(service, folder_id) # Hàm này của bạn ở trên
+        all_files = list_all_files_in_folder(service, folder_id)
         
         count = 0
         for f in all_files:
@@ -132,27 +124,25 @@ def build_task_list(service, root_id):
                 tasks.append({
                     "file_id": f['id'],
                     "filename": f['name'],
-                    "actual_label": label_name,    # Vd: noi-com
-                    "category_type": DRIVE_VPP_FOLDER_NAME # Vd: classes-do-gia-dung
+                    "actual_label": label_name,    
+                    "category_type": DRIVE_VPP_FOLDER_NAME
                 })
                 count += 1
-        # print(f"  -> Class '{label_name}': {count} ảnh")
 
     return tasks
 
-# --- 3. HÀM TEST (WORKER) ---
 def process_single_task(service, task):
     """Download ảnh từ Drive -> Gửi API -> Trả kết quả"""
     file_id = task['file_id']
     filename = task['filename']
     
-    # 1. Download ảnh từ Drive
+    # Download ảnh từ Drive
     image_bytes = download_file_bytes(service, file_id)
     
     if not image_bytes:
         return {**task, "error": "Download Failed"}
 
-    # 2. Gửi API
+    # Gửi API
     try:
         # Request lib cần tuple (filename, bytes, content_type) để upload từ memory
         files = {"file": (filename, image_bytes, 'image/jpeg')} 
@@ -188,7 +178,7 @@ def process_single_task(service, task):
                 "confidence": conf,
                 "action": res.get("action"),
                 "is_correct": is_correct,
-                "file_id": file_id # Giữ lại ID để dễ truy vết nếu cần
+                "file_id": file_id
             }
         else:
             return {**task, "error": f"API {response.status_code}"}
@@ -196,7 +186,6 @@ def process_single_task(service, task):
     except Exception as e:
         return {**task, "error": str(e)}
 
-# --- 4. MAIN ---
 def run_test():
     # Khởi tạo Drive Service
     service = get_drive_service()
@@ -204,23 +193,18 @@ def run_test():
         print("❌ Không thể kết nối Google Drive")
         return
 
-    # 1. Quét toàn bộ file cần test
+    # Quét toàn bộ file cần test
     tasks = build_task_list(service, DATASET_FOLDER_ID)
     print(f"🚀 Tìm thấy tổng cộng {len(tasks)} ảnh. Bắt đầu test tuần tự...")
 
     results = []
     
-    # 2. Chạy Tuần tự (For Loop bình thường)
-    # Dùng tqdm để hiện thanh tiến trình
+    # 2. Chạy Tuần tự
     for i, task in enumerate(tqdm(tasks)):
         try:
             # Gọi hàm xử lý trực tiếp
             res = process_single_task(service, task)
             results.append(res)
-            
-            # --- QUAN TRỌNG: Delay nhẹ ---
-            # Nghỉ 0.5 giây giữa các ảnh để Google và Server API không chặn IP
-            # Nếu vẫn lỗi, hãy tăng lên 1 giây
             time.sleep(3) 
             
         except KeyboardInterrupt:
@@ -231,26 +215,26 @@ def run_test():
             # Vẫn lưu lại lỗi để biết file nào hỏng
             results.append({**task, "error": str(e)})
 
-    # 3. Xuất Excel
-    if results:
-        df = pd.DataFrame(results)
-        # Sắp xếp cho đẹp
-        if 'type' in df.columns and 'actual_label' in df.columns:
-            df = df.sort_values(by=['type', 'actual_label'])
+    # Xuất Excel
+    # if results:
+    #     df = pd.DataFrame(results)
+    #     # Sắp xếp cho đẹp
+    #     if 'type' in df.columns and 'actual_label' in df.columns:
+    #         df = df.sort_values(by=['type', 'actual_label'])
             
-        df.to_excel(OUTPUT_FILE, index=False)
+    #     df.to_excel(OUTPUT_FILE, index=False)
         
-        # Thống kê nhanh
-        if 'is_correct' in df.columns:
-            # Lọc bỏ các dòng lỗi trước khi tính toán
-            valid_results = df[df['is_correct'].notnull()] 
-            if not valid_results.empty:
-                acc = valid_results['is_correct'].mean() * 100
-                print(f"\n📊 Accuracy sơ bộ: {acc:.2f}% (trên {len(valid_results)} ảnh thành công)")
+    #     # Thống kê nhanh
+    #     if 'is_correct' in df.columns:
+    #         # Lọc bỏ các dòng lỗi trước khi tính toán
+    #         valid_results = df[df['is_correct'].notnull()] 
+    #         if not valid_results.empty:
+    #             acc = valid_results['is_correct'].mean() * 100
+    #             print(f"\n📊 Accuracy sơ bộ: {acc:.2f}% (trên {len(valid_results)} ảnh thành công)")
             
-        print(f"✅ Đã lưu kết quả tại: {OUTPUT_FILE}")
-    else:
-        print("⚠️ Không có kết quả nào được xử lý.")
+    #     print(f"✅ Đã lưu kết quả tại: {OUTPUT_FILE}")
+    # else:
+    #     print("⚠️ Không có kết quả nào được xử lý.")
 
 if __name__ == "__main__":
     run_test()

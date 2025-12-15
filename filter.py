@@ -58,7 +58,15 @@ class ImageFilter:
         # Decode ảnh
         img_numpy = self._bytes_to_image(input_data)
         if img_numpy is None:
-            return False, [], [] # ảnh lỗi -> bỏ
+            self._log_to_mongo(
+                metadata=metadata, 
+                image_bytes=input_data if isinstance(input_data, (bytes, bytearray)) else None, 
+                detected_labels=[], 
+                is_valid=False, 
+                action="DISCARD", 
+                reason="Invalid Image Data (Decode Failed)"
+            )
+            return False, [], "Image decode failed"
         
         # Inference
         results = self.model(img_numpy, conf=0.8, verbose=False)       
