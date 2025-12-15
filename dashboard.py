@@ -8,6 +8,7 @@ from dotenv import load_dotenv #type: ignore
 import time
 from PIL import Image #type:ignore
 from datetime import datetime, timedelta, time
+import batch_test
 load_dotenv()
 st.set_page_config(page_title="AI Image Filter Dashboard", layout="wide", page_icon="🕵️")
 
@@ -257,114 +258,162 @@ with tab2:
         time.sleep(5) # Đợi 5 giây
         st.rerun()
 with tab3:
-    st.header("🧪 Đánh giá Hiệu năng Model (1000 Samples)")
-    st.markdown("""
-    Upload file kết quả từ script `batch_test.py` để phân tích độ tin cậy (Confidence) và các trường hợp sai sót.
-    """)
+    st.header("🧪 Đánh giá Hiệu năng Model")
+    
+    # Chọn chế độ: Upload file cũ hay Chạy Live mới
+    mode = st.radio("Chọn chế độ:", ["📂 Phân tích file Excel cũ", "🚀 Chạy Test Live từ Google Drive"], horizontal=True)
 
-    # Nguồn dữ liệu
-    uploaded_file = st.file_uploader("Chọn file Excel kết quả (test_results_1000.xlsx)", type=['xlsx'])
-    
-    # Tự động tìm file nếu có sẵn ở server
-    default_file = "test_results_1000.xlsx"
-    df_batch = None
-    
-    if uploaded_file:
-        df_batch = pd.read_excel(uploaded_file)
-        st.success(f"Đã tải file: {uploaded_file.name}")
-    elif os.path.exists(default_file):
-        st.info(f"Đã tìm thấy file `{default_file}` trên server. Đang load...")
-        df_batch = pd.read_excel(default_file)
-    
-    # Hiển thị Dashboard phân tích
-    if df_batch is not None:
-        # Config ngưỡng pass
-        col_conf1, col_conf2 = st.columns([1, 3])
-        with col_conf1:
-            threshold = st.slider("Ngưỡng Pass Confidence", 0.0, 1.0, 0.90, 0.05)
-        
-        # Thêm cột đánh giá dựa trên ngưỡng slider
-        df_batch['Pass_Threshold'] = df_batch['confidence'] >= threshold
-        
-        # Lọc dữ liệu
-        total_samples = len(df_batch)
-        passed_samples = len(df_batch[df_batch['Pass_Threshold'] == True])
-        failed_samples = total_samples - passed_samples
-        pass_rate = (passed_samples / total_samples) * 100
-        
-        # KPI Cards
-        k1, k2, k3, k4 = st.columns(4)
-        k1.metric("Tổng mẫu test", total_samples)
-        k2.metric(f"Đạt chuẩn (Conf >= {threshold})", passed_samples)
-        k3.metric("Dưới chuẩn (Cần review)", failed_samples, delta_color="inverse")
-        k4.metric("Tỷ lệ Pass", f"{pass_rate:.1f}%")
-        
-        st.divider()
-        
-        # Bảng phân phối Confidence
-        st.subheader("1. Biểu đồ Phân phối Độ tin cậy (Confidence Distribution)")
-        st.caption("Biểu đồ này cho biết Model đang 'tự tin' hay 'lưỡng lự'. Càng lệch về bên phải (1.0) càng tốt.")
-        
-        fig_hist = px.histogram(
-            df_batch, 
-            x="confidence", 
-            color="type", # Phân màu theo Valid/Imbalance/Unknown
-            nbins=50, 
-            marginal="box", # Thêm biểu đồ box plot ở trên
-            hover_data=df_batch.columns,
-            color_discrete_map={"valid": "green", "imbalance": "orange", "unknown": "red"}
-        )
-        # Vẽ đường kẻ đỏ ngưỡng threshold
-        fig_hist.add_vline(x=threshold, line_width=3, line_dash="dash", line_color="red")
-        st.plotly_chart(fig_hist, use_container_width=True)
-
-        # Biểu đồ Pass theo nhóm dữ liệu
-        c1, c2 = st.columns(2)
-        with c1:
-            st.subheader("2. Tỷ lệ Pass theo nhóm dữ liệu")
-            # Group by Type và tính tỷ lệ pass
-            pass_by_type = df_batch.groupby('type')['Pass_Threshold'].mean().reset_index()
-            pass_by_type['Pass_Threshold'] = pass_by_type['Pass_Threshold'] * 100
+    if mode == "📂 Phân tích file Excel cũ":
+        uploaded_file = st.file_uploader("Upload test_results.xlsx", type=['xlsx'])
+        default_file = "test_results_1000.xlsx"
+        df_batch = None
+        if uploaded_file:
+            df_batch = pd.read_excel(uploaded_file)
+            st.dataframe(df_batch.head())
+        elif os.path.exists(default_file):
+            st.info(f"Đã tìm thấy file mặc định `{default_file}`.")
+            df_batch = pd.read_excel(default_file)
             
-            fig_bar = px.bar(
-                pass_by_type, x='type', y='Pass_Threshold', 
-                color='type', 
-                text_auto='.1f',
-                title="Tỷ lệ đạt chuẩn (%) theo từng loại dữ liệu"
-            )
-            fig_bar.update_yaxes(range=[0, 100])
-            st.plotly_chart(fig_bar, use_container_width=True)
+        if df_batch is not None:
+            col_conf1, col_conf2 = st.columns([1, 3])
+            with col_conf1:
+                threshold = st.slider("Ngưỡng Pass Confidence", 0.0, 1.0, 0.90, 0.05)
             
-        with c2:
-            st.subheader("3. Scatter Plot: Confidence vs. Labels")
-            # Giúp nhìn nhanh class nào hay bị điểm thấp
-            fig_scatter = px.scatter(
-                df_batch, x="predicted_label", y="confidence", color="type",
-                hover_data=['filename', 'actual_label'],
-                title="Độ tin cậy của từng Class dự đoán"
+            df_batch['Pass_Threshold'] = df_batch['confidence'] >= threshold
+            
+            total_samples = len(df_batch)
+            passed_samples = len(df_batch[df_batch['Pass_Threshold'] == True])
+            failed_samples = total_samples - passed_samples
+            pass_rate = (passed_samples / total_samples) * 100
+            
+            k1, k2, k3, k4 = st.columns(4)
+            k1.metric("Tổng mẫu test", total_samples)
+            k2.metric(f"Đạt chuẩn (Conf >= {threshold})", passed_samples)
+            k3.metric("Dưới chuẩn", failed_samples, delta_color="inverse")
+            k4.metric("Tỷ lệ Pass", f"{pass_rate:.1f}%")
+            
+            st.divider()
+            
+            st.subheader("1. Biểu đồ Phân phối Độ tin cậy")
+            fig_hist = px.histogram(
+                df_batch, x="confidence", color="type", nbins=50, marginal="box",
+                hover_data=df_batch.columns,
+                color_discrete_map={"valid": "green", "imbalance": "orange", "unknown": "red"}
             )
-            fig_scatter.add_hline(y=threshold, line_dash="dash", line_color="red")
-            st.plotly_chart(fig_scatter, use_container_width=True)
+            fig_hist.add_vline(x=threshold, line_width=3, line_dash="dash", line_color="red")
+            st.plotly_chart(fig_hist, use_container_width=True)
 
-        # Danh sách Fail Cases
-        st.subheader("⚠️ Danh sách các ca cần đánh giá lại (Fail Cases)")
-        st.write(f"Dưới đây là các ảnh có Confidence < {threshold}. Bạn hãy kiểm tra xem tại sao.")
-        
-        # Lọc ra các ca fail
-        failed_df = df_batch[df_batch['Pass_Threshold'] == False].sort_values(by="confidence")
-        
-        # Hiển thị bảng tương tác
-        st.dataframe(
-            failed_df[['filename', 'type', 'actual_label', 'predicted_label', 'confidence']], 
-            use_container_width=True
-        )
-        
-        with st.expander("💡 Gợi ý xử lý"):
-            st.markdown("""
-            * **Nếu Type = 'imbalance' và Conf thấp:** Model chưa học đủ góc độ này -> **Train thêm.**
-            * **Nếu Type = 'valid' và Conf thấp:** Ảnh có thể bị mờ, nhiễu hoặc Model nhận diện kém -> **Cần kiểm tra kỹ.**
-            * **Nếu Type = 'unknown' mà Conf CAO (False Positive):** Nguy hiểm! Model đang nhận nhầm rác thành vật thể -> **Cần chỉnh lại Threshold hoặc train thêm class background.**
-            """)
+            c1, c2 = st.columns(2)
+            with c1:
+                st.subheader("2. Tỷ lệ Pass theo nhóm")
+                pass_by_type = df_batch.groupby('type')['Pass_Threshold'].mean().reset_index()
+                pass_by_type['Pass_Threshold'] = pass_by_type['Pass_Threshold'] * 100
+                fig_bar = px.bar(pass_by_type, x='type', y='Pass_Threshold', color='type', text_auto='.1f')
+                fig_bar.update_yaxes(range=[0, 100])
+                st.plotly_chart(fig_bar, use_container_width=True)
+                
+            with c2:
+                st.subheader("3. Scatter Plot: Confidence vs Labels")
+                fig_scatter = px.scatter(
+                    df_batch, x="predicted_label", y="confidence", color="type",
+                    hover_data=['filename', 'actual_label']
+                )
+                fig_scatter.add_hline(y=threshold, line_dash="dash", line_color="red")
+                st.plotly_chart(fig_scatter, use_container_width=True)
 
-    else:
-        st.warning("⚠️ Chưa có dữ liệu")
+            st.subheader("⚠️ Danh sách Fail Cases")
+            failed_df = df_batch[df_batch['Pass_Threshold'] == False].sort_values(by="confidence")
+            st.dataframe(failed_df[['filename', 'type', 'actual_label', 'predicted_label', 'confidence']], use_container_width=True)
+            
+            with st.expander("💡 Gợi ý xử lý"):
+                st.markdown("""
+                * **Imbalance & Conf thấp:** Train thêm góc độ này.
+                * **Valid & Conf thấp:** Kiểm tra chất lượng ảnh.
+                * **Unknown & Conf cao:** Coi chừng False Positive.
+                """)
+        else:
+            st.warning("⚠️ Chưa có dữ liệu Excel để phân tích.")
+
+    elif mode == "🚀 Chạy Test Live từ Google Drive":
+        st.info("Chế độ này sẽ kết nối Google Drive, tải ảnh và gửi lên API theo thời gian thực.")
+        
+        # Session State để lưu kết quả Live
+        if "live_results" not in st.session_state:
+            st.session_state.live_results = []
+        if "is_testing" not in st.session_state:
+            st.session_state.is_testing = False
+
+        col_btn, col_metric = st.columns([1, 4])
+        
+        with col_btn:
+            if st.button("▶️ BẮT ĐẦU TEST", type="primary", disabled=st.session_state.is_testing):
+                st.session_state.is_testing = True
+                st.session_state.live_results = [] # Reset
+                st.rerun()
+
+        # Hiển thị kết quả Real-time
+        placeholder_bar = st.empty()
+        placeholder_status = st.empty()
+        placeholder_df = st.empty()
+
+        # Logic chạy Test
+        if st.session_state.is_testing:
+            # Gọi hàm từ batch_test để lấy service
+            service = batch_test.get_drive_service()
+            
+            if not service:
+                st.error("❌ Không thể kết nối Google Drive. Kiểm tra file `token.json` hoặc `client_secrets.json`.")
+                st.session_state.is_testing = False
+            else:
+                with st.spinner("Đang quét danh sách ảnh từ Drive..."):
+                    # Gọi hàm từ batch_test để lấy danh sách file
+                    tasks = batch_test.build_task_list(service)
+                
+                if not tasks:
+                    st.warning("⚠️ Không tìm thấy ảnh nào trong folder quy định.")
+                    st.session_state.is_testing = False
+                else:
+                    placeholder_status.info(f"🚀 Tìm thấy {len(tasks)} ảnh. Đang xử lý...")
+                    progress_bar = placeholder_bar.progress(0)
+
+                    # Xử lý hình ảnh
+                    for i, task in enumerate(tasks):
+                        # Gọi hàm xử lý từng task từ module riêng
+                        result = batch_test.process_single_task(
+                            service=service, 
+                            task=task, 
+                            api_key=api_key, 
+                            api_url=API_URL
+                        )
+                        
+                        # Cập nhật kết quả vào Session State
+                        st.session_state.live_results.append(result)
+                        
+                        # Cập nhật UI
+                        df_live = pd.DataFrame(st.session_state.live_results)
+                        placeholder_df.dataframe(df_live, height=400, use_container_width=True)
+                        progress_bar.progress((i + 1) / len(tasks))
+                        
+                        # Sleep nhẹ để không spam server quá gắt
+                        time.sleep(0.1) 
+
+                    st.success("✅ Đã hoàn thành Batch Test!")
+                    st.session_state.is_testing = False
+                    
+                    # Nút tải xuống kết quả
+                    if st.session_state.live_results:
+                        df_final = pd.DataFrame(st.session_state.live_results)
+                        csv = df_final.to_csv(index=False).encode('utf-8')
+                        st.download_button("📥 Tải kết quả CSV", csv, "live_test_results.csv", "text/csv")
+
+        # Hiển thị lại bảng nếu đã chạy xong (để không bị mất khi thao tác khác)
+        elif st.session_state.live_results:
+            df_live = pd.DataFrame(st.session_state.live_results)
+            st.dataframe(df_live, height=400, use_container_width=True)
+            
+            # Tính toán nhanh Accuracy
+            if "Is Correct" in df_live.columns:
+                valid = df_live[df_live["Status"] == "Success"]
+                if not valid.empty:
+                    acc = valid["Is Correct"].mean() * 100
+                    st.metric("Độ chính xác hiện tại", f"{acc:.2f}%", f"{len(valid)} mẫu")

@@ -11,9 +11,8 @@ from google_auth_oauthlib.flow import InstalledAppFlow # type:ignore
 from googleapiclient.discovery import build # type:ignore
 from googleapiclient.http import MediaIoBaseDownload # type:ignore
 
-API_URL = "https://cave-reconstruction-invention-somewhat.trycloudflare.com/v1/filter"
+API_URL = "https://accounting-stones-wolf-bills.trycloudflare.com/v1/filter"
 API_KEY = "Data_team_kOH17bVPOEf7kPd6y0YNICNSnZyT5neg"
-DATASET_FOLDER_ID = "1PlH4I4MMHal4oMFf6aqFnUC8-sOwO60A" 
 DRIVE_BASE_FOLDER_NAME = "DATA"
 DRIVE_SUB_FOLDER_NAME = "object_detection"
 DRIVE_VPP_FOLDER_NAME = "classes-do-gia-dung"
@@ -78,11 +77,11 @@ def download_file_bytes(service, file_id):
     except Exception:
         return None
 
-def build_task_list(service, root_id):
+def build_task_list(service):
     tasks = []
     print("🔄 Đang định vị thư mục mục tiêu...")
 
-    data_id = find_folder_id_by_name(service, DRIVE_BASE_FOLDER_NAME, root_id)
+    data_id = find_folder_id_by_name(service, DRIVE_BASE_FOLDER_NAME, "1PlH4I4MMHal4oMFf6aqFnUC8-sOwO60A")
     if not data_id: 
         return []
 
@@ -131,25 +130,23 @@ def build_task_list(service, root_id):
 
     return tasks
 
-def process_single_task(service, task):
+def process_single_task(service, task, api_key, api_url):
     """Download ảnh từ Drive -> Gửi API -> Trả kết quả"""
-    file_id = task['file_id']
-    filename = task['filename']
-    
-    # Download ảnh từ Drive
-    image_bytes = download_file_bytes(service, file_id)
-    
+    image_bytes = download_file_bytes(service, task['file_id'])
     if not image_bytes:
-        return {**task, "error": "Download Failed"}
+        return {
+            "Filename": task['filename'],
+            "Actual": task['actual_label'],
+            "Status": "Download Failed",
+            "Pass_Threshold": False
+        }
 
-    # Gửi API
     try:
-        # Request lib cần tuple (filename, bytes, content_type) để upload từ memory
-        files = {"file": (filename, image_bytes, 'image/jpeg')} 
-        data = {"source": "drive_batch_test"}
-        headers = {"x-api-key": API_KEY}
+        files = {"file": (task['filename'], image_bytes, 'image/jpeg')}
+        data = {"source": "streamlit_drive_live"}
+        headers = {"x-api-key": api_key}
         
-        response = requests.post(API_URL, files=files, data=data, headers=headers)
+        response = requests.post(api_url, files=files, data=data, headers=headers)
         
         if response.status_code == 200:
             res = response.json()
@@ -163,78 +160,33 @@ def process_single_task(service, task):
                 pred_label = "None"
                 conf = 0.0
             
+            # Logic check đúng sai
             is_correct = False
             if task['category_type'] == "unknown":
                 is_correct = (pred_label == "None")
             else:
-                # So sánh tương đối (vd: 'smartphone' in 'black smartphone')
                 is_correct = str(task['actual_label']).lower() in str(pred_label).lower()
 
             return {
-                "filename": filename,
-                "type": task['category_type'],
-                "actual_label": task['actual_label'],
-                "predicted_label": pred_label,
-                "confidence": conf,
-                "action": res.get("action"),
-                "is_correct": is_correct,
-                "file_id": file_id
+                "Filename": task['filename'],
+                "Actual": task['actual_label'],
+                "Predicted": pred_label,
+                "Confidence": conf,
+                "Is Correct": is_correct,
+                "Status": "Success",
+                "type": task['category_type'] # Dùng cho biểu đồ
             }
         else:
-            return {**task, "error": f"API {response.status_code}"}
-            
+            return {
+                "Filename": task['filename'],
+                "Actual": task['actual_label'],
+                "Status": f"API Error {response.status_code}",
+                "Pass_Threshold": False
+            }
     except Exception as e:
-        return {**task, "error": str(e)}
-
-def run_test():
-    # Khởi tạo Drive Service
-    service = get_drive_service()
-    if not service:
-        print("❌ Không thể kết nối Google Drive")
-        return
-
-    # Quét toàn bộ file cần test
-    tasks = build_task_list(service, DATASET_FOLDER_ID)
-    print(f"🚀 Tìm thấy tổng cộng {len(tasks)} ảnh. Bắt đầu test tuần tự...")
-
-    results = []
-    
-    # 2. Chạy Tuần tự
-    for i, task in enumerate(tqdm(tasks)):
-        try:
-            # Gọi hàm xử lý trực tiếp
-            res = process_single_task(service, task)
-            results.append(res)
-            time.sleep(3) 
-            
-        except KeyboardInterrupt:
-            print("\n🛑 Người dùng dừng chương trình. Đang lưu kết quả tạm thời...")
-            break
-        except Exception as e:
-            print(f"\n⚠️ Lỗi bất ngờ tại file {task['filename']}: {e}")
-            # Vẫn lưu lại lỗi để biết file nào hỏng
-            results.append({**task, "error": str(e)})
-
-    # Xuất Excel
-    # if results:
-    #     df = pd.DataFrame(results)
-    #     # Sắp xếp cho đẹp
-    #     if 'type' in df.columns and 'actual_label' in df.columns:
-    #         df = df.sort_values(by=['type', 'actual_label'])
-            
-    #     df.to_excel(OUTPUT_FILE, index=False)
-        
-    #     # Thống kê nhanh
-    #     if 'is_correct' in df.columns:
-    #         # Lọc bỏ các dòng lỗi trước khi tính toán
-    #         valid_results = df[df['is_correct'].notnull()] 
-    #         if not valid_results.empty:
-    #             acc = valid_results['is_correct'].mean() * 100
-    #             print(f"\n📊 Accuracy sơ bộ: {acc:.2f}% (trên {len(valid_results)} ảnh thành công)")
-            
-    #     print(f"✅ Đã lưu kết quả tại: {OUTPUT_FILE}")
-    # else:
-    #     print("⚠️ Không có kết quả nào được xử lý.")
-
-if __name__ == "__main__":
-    run_test()
+        return {
+            "Filename": task['filename'],
+            "Actual": task['actual_label'],
+            "Status": f"Error: {str(e)}",
+            "Pass_Threshold": False
+        }
