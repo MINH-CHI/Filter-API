@@ -329,5 +329,5 @@ with tab3:
 
     # Logic Auto Refresh
     if auto_refresh:
-        time.sleep(2) # Refresh mỗi 2 giây
+        time.sleep(5) # Refresh mỗi 2 giây
         st.rerun()
