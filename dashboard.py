@@ -5,7 +5,6 @@ import plotly.express as px #type:ignore
 import pymongo #type:ignore
 import os
 from dotenv import load_dotenv #type: ignore
-import time
 from PIL import Image #type:ignore
 from datetime import datetime, timedelta, time
 load_dotenv()
