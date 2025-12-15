@@ -3,22 +3,29 @@ import io
 import requests # type:ignore
 import pandas as pd # type:ignore
 import time
+from time import datetime
 from tqdm import tqdm # type:ignore
-import concurrent.futures
+from pymongo import MongoClient # type:ignore
 from google.auth.transport.requests import Request # type:ignore
 from google.oauth2.credentials import Credentials # type:ignore
 from google_auth_oauthlib.flow import InstalledAppFlow # type:ignore
 from googleapiclient.discovery import build # type:ignore
 from googleapiclient.http import MediaIoBaseDownload # type:ignore
 
-API_URL = "https://accounting-stones-wolf-bills.trycloudflare.com/v1/filter"
+API_URL = "https://lopez-sec-thanks-nokia.trycloudflare.com/v1/filter"
 API_KEY = "Data_team_kOH17bVPOEf7kPd6y0YNICNSnZyT5neg"
 DRIVE_BASE_FOLDER_NAME = "DATA"
 DRIVE_SUB_FOLDER_NAME = "object_detection"
 DRIVE_VPP_FOLDER_NAME = "classes-do-gia-dung"
 OUTPUT_FILE = "drive_test_results.xlsx"
 TOKEN_FILE = 'token.json' 
+MONGO_URI = os.getenv("MONGO_URI")
+DB_NAME = "api_request_log" 
+COLLECTION_NAME = "api_unlabeled_images"
 
+def get_mongo_collection():
+    client = MongoClient(MONGO_URI)
+    return client[DB_NAME][COLLECTION_NAME]
 def get_drive_service():
     creds = None
     if os.path.exists(TOKEN_FILE):
@@ -130,63 +137,92 @@ def build_task_list(service):
 
     return tasks
 
-def process_single_task(service, task, api_key, api_url):
-    """Download ảnh từ Drive -> Gửi API -> Trả kết quả"""
-    image_bytes = download_file_bytes(service, task['file_id'])
-    if not image_bytes:
-        return {
-            "Filename": task['filename'],
-            "Actual": task['actual_label'],
-            "Status": "Download Failed",
-            "Pass_Threshold": False
+def run_test():
+    print("🚀 Bắt đầu Script Batch Test...")
+    
+    # 1. Kết nối Mongo & Xóa dữ liệu cũ (để Dashboard sạch sẽ)
+    collection = get_mongo_collection()
+    print("🧹 Đang dọn dẹp dữ liệu test cũ trên MongoDB...")
+    collection.delete_many({}) # Xóa sạch collection test cũ
+    
+    # 2. Kết nối Drive
+    service = get_drive_service()
+    if not service: return
+
+    # 3. Quét task
+    # (Bạn hãy copy hàm build_task_list vào file này nhé)
+    # tasks = build_task_list(service, DATASET_FOLDER_ID) 
+    # Ở đây tôi giả lập tasks để demo nếu bạn chưa copy hàm
+    print("🔄 Đang quét ảnh từ Drive...")
+    # --- CHỖ NÀY BẠN GỌI HÀM THẬT CỦA BẠN ---
+    # tasks = build_task_list(service, DATASET_FOLDER_ID)
+    tasks = [] # Placeholder
+    print(f"📋 Tìm thấy {len(tasks)} ảnh.")
+
+    # 4. Chạy vòng lặp xử lý
+    for i, task in enumerate(tqdm(tasks, desc="Processing")):
+        filename = task['filename']
+        actual = task['actual_label']
+        
+        # Tải ảnh
+        img_bytes = download_file_bytes(service, task['file_id'])
+        
+        result_record = {
+            "timestamp": datetime.now(),
+            "filename": filename,
+            "actual_label": actual,
+            "type": task['category_type'],
+            "status": "Processing..."
         }
 
-    try:
-        files = {"file": (task['filename'], image_bytes, 'image/jpeg')}
-        data = {"source": "streamlit_drive_live"}
-        headers = {"x-api-key": api_key}
-        
-        response = requests.post(api_url, files=files, data=data, headers=headers)
-        
-        if response.status_code == 200:
-            res = response.json()
-            detections = res.get("detections", [])
-            
-            if detections:
-                best_det = sorted(detections, key=lambda x: x['confidence'], reverse=True)[0]
-                pred_label = best_det['object']
-                conf = best_det['confidence']
-            else:
-                pred_label = "None"
-                conf = 0.0
-            
-            # Logic check đúng sai
-            is_correct = False
-            if task['category_type'] == "unknown":
-                is_correct = (pred_label == "None")
-            else:
-                is_correct = str(task['actual_label']).lower() in str(pred_label).lower()
+        if img_bytes:
+            try:
+                files = {"file": (filename, img_bytes, 'image/jpeg')}
+                data = {"source": "batch_script_runner"}
+                headers = {"x-api-key": API_KEY}
+                
+                # Gọi API
+                resp = requests.post(API_URL, files=files, data=data, headers=headers)
+                
+                if resp.status_code == 200:
+                    res_json = resp.json()
+                    detections = res_json.get("detections", [])
+                    
+                    if detections:
+                        best = sorted(detections, key=lambda x: x['confidence'], reverse=True)[0]
+                        pred = best['object']
+                        conf = best['confidence']
+                    else:
+                        pred = "None"
+                        conf = 0.0
+                    
+                    # Logic Check
+                    is_correct = False
+                    if task['category_type'] == "unknown":
+                        is_correct = (pred == "None")
+                    else:
+                        is_correct = str(actual).lower() in str(pred).lower()
 
-            return {
-                "Filename": task['filename'],
-                "Actual": task['actual_label'],
-                "Predicted": pred_label,
-                "Confidence": conf,
-                "Is Correct": is_correct,
-                "Status": "Success",
-                "type": task['category_type'] # Dùng cho biểu đồ
-            }
+                    # Cập nhật record
+                    result_record.update({
+                        "predicted_label": pred,
+                        "confidence": conf,
+                        "is_correct": is_correct,
+                        "status": "Done"
+                    })
+                else:
+                    result_record["status"] = f"API Error {resp.status_code}"
+            except Exception as e:
+                result_record["status"] = f"Error: {str(e)}"
         else:
-            return {
-                "Filename": task['filename'],
-                "Actual": task['actual_label'],
-                "Status": f"API Error {response.status_code}",
-                "Pass_Threshold": False
-            }
-    except Exception as e:
-        return {
-            "Filename": task['filename'],
-            "Actual": task['actual_label'],
-            "Status": f"Error: {str(e)}",
-            "Pass_Threshold": False
-        }
+            result_record["status"] = "Download Failed"
+
+        # QUAN TRỌNG: Ghi ngay vào MongoDB
+        collection.insert_one(result_record)
+        
+        # Sleep nhẹ
+        time.sleep(0.5)
+
+    print("✅ Đã hoàn thành test.")
+if __name__ == "__main__":
+    run_test()
