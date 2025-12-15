@@ -9,7 +9,8 @@ from filter import ImageFilter
 from secrets_config import API_KEYS #type:ignore
 from fastapi.security.api_key import APIKeyHeader  #type:ignore
 from starlette.status import HTTP_403_FORBIDDEN  #type:ignore
-
+from dotenv import load_dotenv
+load_dotenv()
 MODEL_PATH = os.getenv("MODEL_PATH", "finetuned_nc126_best_mAP.onnx")
 MONGO_URI = os.getenv("MONGO_URI")
 DB_NAME = "api_request_log" 

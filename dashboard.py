@@ -11,21 +11,27 @@ from datetime import datetime, timedelta, time as dt_time
 load_dotenv()
 st.set_page_config(page_title="AI Image Filter Dashboard", layout="wide", page_icon="🕵️")
 
-# Cấu hình kết nối API local
-# API_URL = "http://localhost:8000/v1/filter"
-
-# default_api_url = "http://api:8000/v1/filter"
-# API_URL = os.getenv("API_URL", "http://localhost:8000/v1/filter")
-# Cấu hình kết nối MongoDB (Cho Tab Thống kê)
 MONGO_URI = os.getenv("MONGO_URI")
 DB_NAME = "api_request_log"
 COLLECTION_NAME = "api_unlabeled_images" 
 CONFIG_COLLECTION = "system_config"
-@st.cache_data(ttl=60) # Cache 60 giây để đỡ gọi DB nhiều
+@st.cache_resource
+def init_mongo_client():
+    """Khởi tạo kết nối MongoDB và cache lại để dùng chung."""
+    if not MONGO_URI:
+        return None
+    try:
+        client = pymongo.MongoClient(MONGO_URI, serverSelectionTimeoutMS=3000)
+        client.server_info()  # Trigger kiểm tra kết nối
+        return client
+    except Exception as e:
+        st.toast(f"❌ Lỗi kết nối MongoDB: {e}", icon="🔥")
+        return None
+
 def get_api_url_from_mongo():
     """Lấy API URL mới nhất từ MongoDB"""
     try:
-        client = pymongo.MongoClient(MONGO_URI, serverSelectionTimeoutMS=2000)
+        client = init_mongo_client()
         db = client[DB_NAME]
         coll = db[CONFIG_COLLECTION]
         
@@ -35,6 +41,7 @@ def get_api_url_from_mongo():
     except Exception:
         pass
     return None
+
 cloud_url = get_api_url_from_mongo()
 
 if cloud_url:
@@ -66,20 +73,9 @@ with st.sidebar:
         st.error("Ngày bắt đầu phải nhỏ hơn ngày kết thúc!")
         
     st.info(f"API URL: `{API_URL}`")
-@st.cache_resource
-def init_mongo_connection():
-    try:
-        if not MONGO_URI:
-            return None
-        client = pymongo.MongoClient(MONGO_URI, serverSelectionTimeoutMS=2000)
-        client.server_info() # Check kết nối
-        return client
-    except Exception as e:
-        print(f"Mongo Error: {e}")
-        return None
 
 def load_logs(start_date, end_date):
-    client = init_mongo_connection()
+    client = init_mongo_client()
     if not client:
         return None
     db = client[DB_NAME]
@@ -92,20 +88,31 @@ def load_logs(start_date, end_date):
             "$lte": end_dt    # Less than or equal (Nhỏ hơn hoặc bằng)
         }
     }
-    # Lấy 1000 record mới nhất
-    data = list(collection.find().sort("timestamp", -1))
-    
-    if not data:
-        return pd.DataFrame()
-    
-    df = pd.DataFrame(data)
-    
-    # Chuẩn hóa thời gian
-    if 'timestamp' in df.columns:
-        df['timestamp'] = pd.to_datetime(df['timestamp'])
+    try:
+        data = list(collection.find(query).sort("timestamp", -1).limit(2000))
+        if not data:
+            return pd.DataFrame()
         
-    return df
-
+        df = pd.DataFrame(data)
+        if 'timestamp' in df.columns:
+            df['timestamp'] = pd.to_datetime(df['timestamp'])
+        return df
+    except Exception as e:
+        st.error(f"Lỗi truy vấn Log: {e}")
+        return pd.DataFrame()
+def load_test_results():
+    client = init_mongo_client()
+    if not client:
+        return pd.DataFrame()
+    db = client[DB_NAME]
+    collection = db[COLLECTION_NAME] 
+    
+    try:
+        # Lấy 500 record mới nhất
+        data = list(collection.find().sort("timestamp", -1).limit(500))
+        return pd.DataFrame(data)
+    except Exception:
+        return pd.DataFrame()
 st.title("🕵️ Hệ thống Kiểm soát & Lọc Ảnh AI")
 if not api_key:
     st.warning("⚠️ Vui lòng nhập **API Key** ở thanh bên trái (Sidebar) để bắt đầu sử dụng.")
@@ -193,7 +200,7 @@ with tab2:
     
     col_ctrl1, col_ctrl2 = st.columns([1, 4])
     with col_ctrl1:
-        auto_refresh = st.toggle("🔴 Live (5s)", value=False)
+        auto_refresh_tab2 = st.toggle("🔴 Live (5s)", value=False)
     with col_ctrl2:
         if st.button("🔄 Làm mới"): st.rerun()
         
@@ -253,7 +260,7 @@ with tab2:
         st.subheader("📄 Chi tiết Log")
         display_cols = ['timestamp', 'user', 'filename', 'action', 'detected_labels']
         st.dataframe(df[[c for c in display_cols if c in df.columns]], use_container_width=True)
-    if auto_refresh:
+    if auto_refresh_tab2:
         time.sleep(5) # Đợi 5 giây
         st.rerun()
 with tab3:
@@ -263,18 +270,13 @@ with tab3:
     # Nút refresh thủ công và Auto-refresh
     col_re1, col_re2 = st.columns([1, 5])
     with col_re1:
-        auto_refresh = st.toggle("🔴 Auto-Refresh (2s)", value=True)
+        auto_refresh_tab3 = st.toggle("🔴 Auto-Refresh (2s)", value=True)
     with col_re2:
         if st.button("🔄 Làm mới ngay"): st.rerun()
 
     # Load dữ liệu từ Mongo
-    client = init_mongo_connection()
-    
-    # Lấy tất cả kết quả test mới nhất
-    # (Có thể thêm limit nếu dữ liệu quá lớn)
-    data = list(client[DB_NAME][COLLECTION_NAME].find().sort("timestamp", -1))
-    
-    df_live = pd.DataFrame(data)
+    df_live = load_test_results()
+    # df_live = load_logs(start_date, end_date)
 
     if df_live.empty:
         st.warning("⚠️ Chưa có dữ liệu test nào đang chạy. Hãy chạy script `batch_test.py`.")
@@ -328,6 +330,6 @@ with tab3:
                     st.plotly_chart(fig2, use_container_width=True)
 
     # Logic Auto Refresh
-    if auto_refresh:
-        time.sleep(5) # Refresh mỗi 2 giây
+    if auto_refresh_tab3:
+        time.sleep(15) 
         st.rerun()
