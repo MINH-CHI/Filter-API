@@ -11,3 +11,5 @@ __pycache__/
 cloudflared.exe
 args_2.yaml
 secrets_config.py
+client_secrets.json
+token.json

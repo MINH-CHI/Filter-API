@@ -39,19 +39,16 @@ class ImageFilter:
         else:
             print("Filter đang tắt. Mọi ảnh sẽ được chấp nhận.")
 
-    def _bytes_to_image(self, input_data): # Check đối tượng của OpenCV
-        if isinstance(input_data, np.ndarray):
-            _, buffer = cv2.imencode('.jpg', input_data)
-            return buffer.tobytes()
-        elif isinstance(input_data, (bytes, bytearray)):
-            if len(input_data) == 0:
-                print("[Warning] Dữ liệu bytes đầu vào bị rỗng.")
-                return None
-            return input_data
-
-        else:
-            print(f"[Error] Định dạng đầu vào không hỗ trợ: {type(input_data)}. Cần: numpy.ndarray hoặc bytes.")
+    def _bytes_to_image(self, image_bytes): 
+        if not isinstance(image_bytes, (bytes, bytearray)):
+            print(f"[Error] Dữ liệu đầu vào không phải là bytes. Nhận được kiểu: {type(image_bytes)}")
             return None
+
+        nparr = np.frombuffer(image_bytes, np.uint8) 
+        img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+        if img is None:
+            print("[Warning] Dữ liệu bytes không phải là file ảnh hợp lệ hoặc bị hỏng.")
+        return img
 
     def process(self, input_data, metadata=None,custom_targets=None):
         # check cờ tắt/bật
@@ -59,12 +56,12 @@ class ImageFilter:
             return True, [], []
 
         # Decode ảnh
-        img = self._bytes_to_image(input_data)
-        if img is None:
+        img_numpy = self._bytes_to_image(input_data)
+        if img_numpy is None:
             return False, [], [] # ảnh lỗi -> bỏ
-
+        
         # Inference
-        results = self.model(img, conf=0.8, verbose=False)        
+        results = self.model(img_numpy, conf=0.8, verbose=False)       
         detailed_info = []
         detected_labels = set()
         
@@ -93,7 +90,7 @@ class ImageFilter:
         if not detected_labels:
             self._log_to_mongo(
             metadata=metadata, 
-            input_data=input_data, 
+            image_bytes=input_data, 
             detected_labels=[], 
             is_valid=False, 
             action="DISCARD", 
@@ -114,7 +111,7 @@ class ImageFilter:
         # Ghi log (Dù là chó, mèo hay điện thoại đều được ghi lại hết)
         self._log_to_mongo(
             metadata=metadata,
-            input_data=input_data,
+            image_bytes=input_data,
             detected_labels=list(detected_labels),
             detections_detail=detailed_info,
             is_valid=is_valid_result,
@@ -130,7 +127,7 @@ class ImageFilter:
 
         return is_valid_result, list(detected_labels), detailed_info
 
-    def _log_to_mongo(self, metadata, input_data, detected_labels=None, detections_detail=None,is_valid=False, action="DISCARD", reason=None):
+    def _log_to_mongo(self, metadata, image_bytes, detected_labels=None, detections_detail=None,is_valid=False, action="DISCARD", reason=None):
         """
         Ghi log chi tiết mọi request vào MongoDB để phục vụ Dashboard.
         """
@@ -155,11 +152,8 @@ class ImageFilter:
                 "detections_detail": detections_detail if detections_detail else [],
                 "reason": reason,                  # Ghi chú thêm (nếu có)
                 
-                # Lưu ảnh nhỏ (Thumbnail) hoặc ảnh gốc
-                "image_data": Binary(input_data) if input_data else None,
-                
-                # Lưu lại toàn bộ metadata gốc vào 1 góc để debug sau này
-                "raw_metadata": meta 
+                "image_data": Binary(image_bytes) if image_bytes else None,
+                "raw_metadata": meta
             }
 
             # Insert vào Database

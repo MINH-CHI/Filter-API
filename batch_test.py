@@ -1,17 +1,18 @@
 import os
 import io
-import requests
-import pandas as pd
-from tqdm import tqdm
+import requests # type:ignore
+import pandas as pd # type:ignore
+import time
+from tqdm import tqdm # type:ignore
 import concurrent.futures
-from google.auth.transport.requests import Request
-from google.oauth2.credentials import Credentials
-from google_auth_oauthlib.flow import InstalledAppFlow
-from googleapiclient.discovery import build
-from googleapiclient.http import MediaIoBaseDownload
+from google.auth.transport.requests import Request # type:ignore
+from google.oauth2.credentials import Credentials # type:ignore
+from google_auth_oauthlib.flow import InstalledAppFlow # type:ignore
+from googleapiclient.discovery import build # type:ignore
+from googleapiclient.http import MediaIoBaseDownload # type:ignore
 
 # --- CẤU HÌNH ---
-API_URL = "https://translation-published-visiting-nearest.trycloudflare.com/v1/filter"
+API_URL = "https://cave-reconstruction-invention-somewhat.trycloudflare.com/v1/filter"
 API_KEY = "Data_team_kOH17bVPOEf7kPd6y0YNICNSnZyT5neg"
 DATASET_FOLDER_ID = "1PlH4I4MMHal4oMFf6aqFnUC8-sOwO60A" # <--- ID folder gốc trên Drive
 DRIVE_BASE_FOLDER_NAME = "DATA"
@@ -29,7 +30,7 @@ def get_drive_service():
         if creds and creds.expired and creds.refresh_token:
             creds.refresh(Request())
         else:
-            flow = InstalledAppFlow.from_client_secrets_file('credentials.json', ["https://www.googleapis.com/auth/drive"])
+            flow = InstalledAppFlow.from_client_secrets_file('client_secrets.json', ["https://www.googleapis.com/auth/drive"])
             creds = flow.run_local_server(port=0)
         with open(TOKEN_FILE, 'w') as token:
             token.write(creds.to_json())
@@ -197,11 +198,7 @@ def process_single_task(service, task):
 
 # --- 4. MAIN ---
 def run_test():
-    # Khởi tạo Drive Service (Làm 1 lần ở main thread)
-    # Lưu ý: Google API Client object không thread-safe hoàn toàn, 
-    # nhưng build object nhẹ nên có thể pass hoặc init mới trong thread. 
-    # Tốt nhất pass service object vào nhưng cẩn thận. 
-    # Ở đây để đơn giản ta sẽ dùng chung service object (thường ổn với read-only).
+    # Khởi tạo Drive Service
     service = get_drive_service()
     if not service:
         print("❌ Không thể kết nối Google Drive")
@@ -209,23 +206,30 @@ def run_test():
 
     # 1. Quét toàn bộ file cần test
     tasks = build_task_list(service, DATASET_FOLDER_ID)
-    print(f"🚀 Tìm thấy tổng cộng {len(tasks)} ảnh. Bắt đầu test...")
+    print(f"🚀 Tìm thấy tổng cộng {len(tasks)} ảnh. Bắt đầu test tuần tự...")
 
     results = []
     
-    # 2. Chạy Multi-thread
-    # Lưu ý: Giảm max_workers xuống khoảng 4-5 để tránh bị Google chặn (Rate Limit)
-    # Vì mỗi worker sẽ gọi download API.
-    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
-        # Submit task
-        future_to_task = {
-            executor.submit(process_single_task, service, task): task 
-            for task in tasks
-        }
-        
-        for future in tqdm(concurrent.futures.as_completed(future_to_task), total=len(tasks)):
-            res = future.result()
+    # 2. Chạy Tuần tự (For Loop bình thường)
+    # Dùng tqdm để hiện thanh tiến trình
+    for i, task in enumerate(tqdm(tasks)):
+        try:
+            # Gọi hàm xử lý trực tiếp
+            res = process_single_task(service, task)
             results.append(res)
+            
+            # --- QUAN TRỌNG: Delay nhẹ ---
+            # Nghỉ 0.5 giây giữa các ảnh để Google và Server API không chặn IP
+            # Nếu vẫn lỗi, hãy tăng lên 1 giây
+            time.sleep(3) 
+            
+        except KeyboardInterrupt:
+            print("\n🛑 Người dùng dừng chương trình. Đang lưu kết quả tạm thời...")
+            break
+        except Exception as e:
+            print(f"\n⚠️ Lỗi bất ngờ tại file {task['filename']}: {e}")
+            # Vẫn lưu lại lỗi để biết file nào hỏng
+            results.append({**task, "error": str(e)})
 
     # 3. Xuất Excel
     if results:
@@ -238,8 +242,11 @@ def run_test():
         
         # Thống kê nhanh
         if 'is_correct' in df.columns:
-            acc = df['is_correct'].mean() * 100
-            print(f"\n📊 Accuracy sơ bộ: {acc:.2f}%")
+            # Lọc bỏ các dòng lỗi trước khi tính toán
+            valid_results = df[df['is_correct'].notnull()] 
+            if not valid_results.empty:
+                acc = valid_results['is_correct'].mean() * 100
+                print(f"\n📊 Accuracy sơ bộ: {acc:.2f}% (trên {len(valid_results)} ảnh thành công)")
             
         print(f"✅ Đã lưu kết quả tại: {OUTPUT_FILE}")
     else:
