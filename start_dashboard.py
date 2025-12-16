@@ -56,8 +56,8 @@ def ensure_api_keys_exist():
 def get_cloudflare_url():
     print("🚀 Đang khởi động Cloudflare Tunnel...")
     
-    # Chạy lệnh cloudflared dưới nền (Subprocess) (Port API server)
-    cmd = ["cloudflared.exe", "tunnel", "--url", "http://127.0.0.1:8501"]
+    # Chạy lệnh cloudflared dưới nền (Subprocess) (Port API server = 8000) http://127.0.0.1:8000
+    cmd = ["cloudflared.exe", "tunnel", "--url", "http://localhost:8501"]
     
     process = subprocess.Popen(
         cmd,
