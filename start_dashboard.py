@@ -57,7 +57,7 @@ def get_cloudflare_url():
     print("🚀 Đang khởi động Cloudflare Tunnel...")
     
     # Chạy lệnh cloudflared dưới nền (Subprocess) (Port API server)
-    cmd = ["cloudflared.exe", "tunnel", "--url", "http://127.0.0.1:8000"]
+    cmd = ["cloudflared.exe", "tunnel", "--url", "http://127.0.0.1:8501"]
     
     process = subprocess.Popen(
         cmd,
