@@ -13,7 +13,7 @@ from google_auth_oauthlib.flow import InstalledAppFlow # type:ignore
 from googleapiclient.discovery import build # type:ignore
 from googleapiclient.http import MediaIoBaseDownload # type:ignore
 load_dotenv()
-API_URL = "https://universal-obituaries-responding-devon.trycloudflare.com/v1/filter"
+API_URL = "https://trainer-findings-cables-pmc.trycloudflare.com/v1/filter"
 API_KEY = os.getenv("API_KEY")
 DRIVE_BASE_FOLDER_NAME = "DATA"
 DRIVE_SUB_FOLDER_NAME = "object_detection"
