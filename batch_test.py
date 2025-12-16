@@ -13,7 +13,7 @@ from google_auth_oauthlib.flow import InstalledAppFlow # type:ignore
 from googleapiclient.discovery import build # type:ignore
 from googleapiclient.http import MediaIoBaseDownload # type:ignore
 load_dotenv()
-API_URL = "https://dir-doe-pursuant-price.trycloudflare.com/v1/filter"
+API_URL = "https://universal-obituaries-responding-devon.trycloudflare.com/v1/filter"
 API_KEY = os.getenv("API_KEY")
 DRIVE_BASE_FOLDER_NAME = "DATA"
 DRIVE_SUB_FOLDER_NAME = "object_detection"
@@ -137,7 +137,18 @@ def build_task_list(service):
                 count += 1
 
     return tasks
-
+def get_processed_filenames(collection):
+    """Lấy danh sách các filename đã có status='Done' trong DB"""
+    print("🔍 Đang kiểm tra lịch sử trong MongoDB...")
+    query = {
+        "source": "batch_script_runner",
+        "status": "Done"
+    }
+    # Chỉ lấy trường filename để tiết kiệm RAM
+    records = collection.find(query, {"filename": 1})
+    processed_set = set(doc['filename'] for doc in records)
+    print(f"📚 Tìm thấy {len(processed_set)} ảnh đã xử lý xong trước đó.")
+    return processed_set
 def run_test():
     print("🚀 Bắt đầu Script Batch Test...")
     
@@ -150,8 +161,13 @@ def run_test():
 
     tasks = build_task_list(service)
     print(f"📋 Tổng số ảnh cần test: {len(tasks)}")
+    processed_files = get_processed_filenames(collection)
+    tasks_to_run = []
+    for t in tasks:
+        if t['filename'] not in processed_files:
+            tasks_to_run.append(t)
 
-    for i, task in enumerate(tqdm(tasks, desc="Đang xử lý")):
+    for i, task in enumerate(tqdm(tasks_to_run, desc="Đang xử lý")):
         filename = task['filename']
         actual = task['actual_label']
         
