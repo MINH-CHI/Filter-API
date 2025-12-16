@@ -120,7 +120,7 @@ class ImageFilter:
         is_valid_result = bool(intersect) # True nếu có giao nhau, False nếu không
         action_result = "KEEP" if is_valid_result else "DISCARD"
         
-        # Ghi log (Dù là chó, mèo hay điện thoại đều được ghi lại hết)
+        # Ghi log mọi case vào MongoDB
         self._log_to_mongo(
             metadata=metadata,
             image_bytes=input_data,
