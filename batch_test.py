@@ -142,7 +142,7 @@ def run_test():
     print("🚀 Bắt đầu Script Batch Test...")
     
     collection = get_mongo_collection()
-    # Xóa dữ liệu cũ nếu 
+    # Tùy chọn: Xóa dữ liệu cũ
     # collection.delete_many({"source": "batch_script_runner"})
 
     service = get_drive_service()
@@ -151,84 +151,75 @@ def run_test():
     tasks = build_task_list(service)
     print(f"📋 Tổng số ảnh cần test: {len(tasks)}")
 
-    # Giảm thời gian sleep xuống 2s để chạy nhanh hơn (nếu API chịu tải được)
-    SLEEP_TIME = 2 
-
     for i, task in enumerate(tqdm(tasks, desc="Đang xử lý")):
         filename = task['filename']
         actual = task['actual_label']
         
-        # Chuẩn bị Record mặc định
         result_record = {
             "timestamp": datetime.now(),
             "filename": filename,
             "actual_label": actual,
             "type": task['category_type'],
             "status": "Processing",
-            "source": "batch_script_runner" # Đánh dấu để dễ lọc trên Dashboard
+            "source": "batch_script_runner"
         }
 
-        # Tải ảnh từ Drive
         img_bytes = download_file_bytes(service, task['file_id'])
         
         if img_bytes:
             try:
                 files = {"file": (filename, img_bytes, 'image/jpeg')}
-                data = {"source": "batch_test"} # Gửi thêm metadata nếu cần
+                data = {"source": "batch_test"}
                 headers = {"x-api-key": API_KEY}
                 
-                # 3. GỌI API
+                # Gọi API
                 resp = requests.post(API_URL, files=files, data=data, headers=headers, timeout=30)
                 
                 if resp.status_code == 200:
                     res_json = resp.json()
                     
-                    # Lấy Labels
+                    # Lấy Detected Labels & Action
                     detected_labels = res_json.get("detected_labels", [])
-                    if isinstance(detected_labels, str): # Phòng hờ API trả về string thay vì list
-                        detected_labels = [detected_labels]
-                    
-                    # Lấy Confidence
-                    raw_conf = res_json.get("confidence", 0.0)
-                    final_conf = 0.0
-                    
-                    if isinstance(raw_conf, list):
-                        # Nếu là list, lấy max
-                        if len(raw_conf) > 0:
-                            final_conf = max([float(c) for c in raw_conf if isinstance(c, (int, float))])
-                    else:
-                        try:
-                            final_conf = float(raw_conf)
-                        except:
-                            final_conf = 0.0
-
                     action = res_json.get("action", "UNKNOWN")
+                    
+                    # Xử lý Detections & Bounding Box
+                    detections = res_json.get("detections", []) # Lấy list chi tiết
+                    
+                    final_conf = 0.0
+                    bboxes = []
 
-                    # Nối mảng thành chuỗi để lưu vào DB
+                    if detections:
+                        # Lấy Max Confidence
+                        final_conf = max([d.get('confidence', 0) for d in detections])
+                        
+                        # Trích xuất Bounding Boxes
+                        for d in detections:
+                            if 'box' in d:
+                                bboxes.append(str(d['box']))
+                    
+                    # Tạo chuỗi Box để hiển thị trên Dashboard
+                    bbox_str = " | ".join(bboxes) if bboxes else ""
                     pred_str = ", ".join(detected_labels) if detected_labels else "None"
                     
+                    # Logic kiểm tra đúng sai
                     is_correct = False
-                    # Folder là "unknown" thì đúng nếu AI không detect ra gì (hoặc DISCARD)
                     if task['category_type'].lower() == "unknown":
                         is_correct = (not detected_labels) or (action == "DISCARD")
                     else:
-                        #  Kiểm tra nhãn thực tế có nằm trong danh sách AI detect không
-                        # Chuẩn hóa về lower case để so sánh
                         actual_norm = str(actual).lower().strip()
-                        
-                        # Check xem actual có xuất hiện trong bất kỳ nhãn nào detected không
                         for lbl in detected_labels:
                             if actual_norm in str(lbl).lower():
                                 is_correct = True
                                 break
                     
-                    # Update kết quả vào Record
+                    # Update MongoDB Record
                     result_record.update({
-                        "predicted_label": pred_str, # Lưu chuỗi các nhãn
+                        "predicted_label": pred_str,
                         "confidence": final_conf,
+                        "bounding_box": bbox_str,
                         "action": action,
                         "is_correct": is_correct,
-                        "detected_labels": detected_labels, # Lưu cả mảng gốc nếu cần query sau này
+                        "detected_labels": detected_labels,
                         "status": "Done"
                     })
                     
@@ -241,9 +232,9 @@ def run_test():
         else:
             result_record["status"] = "Download Failed"
 
-        # 5. Insert vào Mongo
+        # Lưu vào Mongo
         collection.insert_one(result_record)
-        time.sleep(20)
+        time.sleep(15)
 
     print("✅ Đã hoàn thành test.")
 if __name__ == "__main__":

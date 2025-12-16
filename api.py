@@ -136,12 +136,15 @@ async def filter_image(
     is_valid, labels, details = filter_tool.process(image_bytes, metadata=metadata)
 
     # Trả kết quả JSON
+    conf_list = [d.get('confidence', 0) for d in details] if details else []
+
     return {
         "filename": file.filename,
         "is_valid": is_valid,
-        "detected_labels": labels,
-        "confidence": details,
         "action": "KEEP" if is_valid else "DISCARD",
+        "detected_labels": labels, # List tên các vật thể
+        "detections": details,     # Chứa full info: Box, Name, Confidence
+        "confidence": conf_list,   
         "processed_by": "Server của Minh",
         "user": user_name
     }

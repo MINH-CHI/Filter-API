@@ -162,7 +162,7 @@ class ImageFilter:
                 "action": action,                  # Hành động: KEEP/DISCARD
                 "detected_labels": detected_labels if detected_labels else [],
                 "detections_detail": detections_detail if detections_detail else [],
-                "reason": reason,                  # Ghi chú thêm (nếu có)
+                "reason": reason,                 
                 
                 "image_data": Binary(image_bytes) if image_bytes else None,
                 "raw_metadata": meta
