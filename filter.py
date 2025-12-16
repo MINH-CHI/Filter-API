@@ -78,6 +78,8 @@ class ImageFilter:
             for box in result.boxes:
                 cls_id = int(box.cls[0])
                 conf = float(box.conf[0])
+                box_coords = box.xyxy[0].tolist() # box.xyxy trả về tensor [x1, y1, x2, y2], cần chuyển sang list
+                box_coords = [round(x, 1) for x in box_coords]
                 
                 label_name = str(cls_id)
                 if self.class_mapping:
@@ -86,7 +88,8 @@ class ImageFilter:
                     label_name = self.model.names.get(cls_id, str(cls_id))
                 detailed_info.append({
                     "object": label_name,
-                    "confidence": round(conf, 2)
+                    "confidence": round(conf, 2),
+                    "box": box_coords
                 })
                 
                 detected_labels.add(label_name)
@@ -99,7 +102,8 @@ class ImageFilter:
             self._log_to_mongo(
             metadata=metadata, 
             image_bytes=input_data, 
-            detected_labels=[], 
+            detected_labels=[],
+            detections_detail=[],
             is_valid=False, 
             action="DISCARD", 
             reason="Model returned None"

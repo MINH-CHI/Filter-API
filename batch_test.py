@@ -142,7 +142,7 @@ def run_test():
     print("🚀 Bắt đầu Script Batch Test...")
     
     collection = get_mongo_collection()
-    # Tùy chọn: Xóa dữ liệu cũ nếu muốn chạy lại từ đầu
+    # Xóa dữ liệu cũ nếu 
     # collection.delete_many({"source": "batch_script_runner"})
 
     service = get_drive_service()
@@ -188,12 +188,12 @@ def run_test():
                     if isinstance(detected_labels, str): # Phòng hờ API trả về string thay vì list
                         detected_labels = [detected_labels]
                     
-                    # Lấy Confidence (Xử lý an toàn cho cả số và mảng)
+                    # Lấy Confidence
                     raw_conf = res_json.get("confidence", 0.0)
                     final_conf = 0.0
                     
                     if isinstance(raw_conf, list):
-                        # Nếu là list, lấy max hoặc trung bình (ở đây lấy max)
+                        # Nếu là list, lấy max
                         if len(raw_conf) > 0:
                             final_conf = max([float(c) for c in raw_conf if isinstance(c, (int, float))])
                     else:
@@ -243,9 +243,7 @@ def run_test():
 
         # 5. Insert vào Mongo
         collection.insert_one(result_record)
-        time.sleep(10)
-
-    print("✅ Đã hoàn thành test.")
+        time.sleep(20)
 
     print("✅ Đã hoàn thành test.")
 if __name__ == "__main__":
