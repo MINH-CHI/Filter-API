@@ -5,17 +5,40 @@ from pymongo import MongoClient, errors  #type: ignore
 from bson.binary import Binary #type: ignore
 from ultralytics import YOLO #type: ignore
 from datetime import datetime
-from bson.binary import Binary #type: ignore
+import io
+from minio import Minio #type: ignore
+from minio.error import S3Error #type: ignore
 class ImageFilter:
-    def __init__(self, model_path, mongo_uri, db_name, collection_name,target_classes, enable_filter = True, device=0,class_mapping=None):
+    def __init__(self, model_path, mongo_uri, db_name, collection_name,target_classes, minio_config, enable_filter = True, device=0,class_mapping=None):
         self.class_mapping = class_mapping  
         self.enable_filter = enable_filter
         self.device = device
         self.target_classes = set(target_classes)
         self.stats = {label: 0 for label in target_classes} # Thống kê
         
+        self.minio_client = None
+        self.bucket_name = minio_config.get("bucket_name", "images")
+        try:
+            self.minio_client = Minio(
+                minio_config["endpoint"], # VD: "play.min.io:9000" hoặc IP nội bộ
+                access_key=minio_config["access_key"],
+                secret_key=minio_config["secret_key"],
+                secure=minio_config.get("secure", False) # True nếu dùng HTTPS
+            )
+            
+            # Kiểm tra xem bucket có tồn tại không, nếu không thì tạo
+            if not self.minio_client.bucket_exists(self.bucket_name):
+                self.minio_client.make_bucket(self.bucket_name)
+                print(f"[MINIO] Đã tạo bucket mới: {self.bucket_name}")
+            else:
+                print(f"[MINIO] Đã kết nối bucket: {self.bucket_name}")
+                
+        except Exception as e:
+            print(f"[ERROR] ❌ Không thể kết nối MinIO: {e}")
+            self.minio_client = None
+        
         if self.enable_filter:
-            # Check nhanh xem máy có nhận GPU không
+            # Check nhanh xem máy host có nhận GPU không
             if self.device == 0 and not torch.cuda.is_available():
                 print("[WARNING] Đã chọn GPU nhưng Torch không tìm thấy CUDA -> sẽ tự động chuyển về CPU.")
                 self.device = 'cpu' # ÉP dùng GPU
@@ -49,6 +72,33 @@ class ImageFilter:
         if img is None:
             print("[Warning] Dữ liệu bytes không phải là file ảnh hợp lệ hoặc bị hỏng.")
         return img
+    def _upload_to_minio(self, image_bytes, filename):
+        """Hàm upload ảnh lên MinIO và trả về đường dẫn object"""
+        if not self.minio_client:
+            return None
+        
+        try:
+            # Tạo tên file duy nhất để tránh trùng lặp: timestamp_filename
+            timestamp_str = datetime.now().strftime("%Y%m%d_%H%M%S")
+            object_name = f"{timestamp_str}_{filename}"
+            
+            # MinIO yêu cầu stream
+            data_stream = io.BytesIO(image_bytes)
+            data_length = len(image_bytes)
+            
+            self.minio_client.put_object(
+                self.bucket_name,
+                object_name,
+                data_stream,
+                data_length,
+                content_type="image/jpeg" # Hoặc tự động detect
+            )
+            # Trả về object name (để sau này dashboard ghép link)
+            return object_name
+            
+        except Exception as e:
+            print(f"[MINIO ERROR] Upload thất bại: {e}")
+            return None
 
     def process(self, input_data, metadata=None,custom_targets=None):
         # check cờ tắt/bật
@@ -58,14 +108,7 @@ class ImageFilter:
         # Decode ảnh
         img_numpy = self._bytes_to_image(input_data)
         if img_numpy is None:
-            self._log_to_mongo(
-                metadata=metadata, 
-                image_bytes=input_data if isinstance(input_data, (bytes, bytearray)) else None, 
-                detected_labels=[], 
-                is_valid=False, 
-                action="DISCARD", 
-                reason="Invalid Image Data (Decode Failed)"
-            )
+            self._log_to_mongo(metadata,detected_labels=[], is_valid=False, action="UNPROCESSED", reason="Invalid Image Data (Decode Failed)")
             return False, [], "Image decode failed"
         
         # Inference
@@ -94,52 +137,50 @@ class ImageFilter:
                 
                 detected_labels.add(label_name)
         
-        # unique_labels = set(detected_labels)
-
-        
         # Model trả về None (Không phát hiện gì hoặc confidence thấp)
         if not detected_labels:
-            self._log_to_mongo(
-            metadata=metadata, 
-            image_bytes=input_data, 
-            detected_labels=[],
-            detections_detail=[],
-            is_valid=False, 
-            action="DISCARD", 
-            reason="Model returned None"
-        )
-            return False, [], [] # Bỏ sau khi đã ném vào DB
-        
-        if custom_targets and len(custom_targets) > 0:
-            targets_to_check = set(custom_targets)
+            action_result = "UNPROCESSED"
+            reason_msg = "No Objects Detected"
+            is_valid_result = False 
         else:
-            targets_to_check = self.target_classes
-        # Có nhãn, kiểm tra xem có nằm trong các class requirement không ?
-        intersect = detected_labels.intersection(targets_to_check)
+            if custom_targets: 
+                targets_to_check = set(custom_targets)
+            else: 
+                targets_to_check = self.target_classes
 
-        is_valid_result = bool(intersect) # True nếu có giao nhau, False nếu không
-        action_result = "KEEP" if is_valid_result else "DISCARD"
-        
+            intersect = detected_labels.intersection(targets_to_check)
+            is_valid_result = bool(intersect)
+            
+            if is_valid_result:
+                action_result = "KEEP"
+                reason_msg = "Found Target Classes"
+            else:
+                action_result = "UNPROCESSED"
+                reason_msg = "Objects detected but NOT in Target"
+        minio_path = None
+        if input_data:
+            filename = metadata.get("filename", "unknown.jpg") if metadata else "unknown.jpg"
+            minio_path = self._upload_to_minio(input_data, filename)
         # Ghi log mọi case vào MongoDB
         self._log_to_mongo(
             metadata=metadata,
-            image_bytes=input_data,
             detected_labels=list(detected_labels),
             detections_detail=detailed_info,
             is_valid=is_valid_result,
             action=action_result,
-            reason="Filtered by Target Classes"
+            reason=reason_msg,
+            minio_object_name=minio_path
         )
         
         # Update thống kê (chỉ cộng nếu là target)
         if is_valid_result:
-            for label in intersect:
-                if label in self.stats:
+            for label in detected_labels.intersection(self.target_classes):
+                if label in self.stats: 
                     self.stats[label] += 1
 
         return is_valid_result, list(detected_labels), detailed_info
 
-    def _log_to_mongo(self, metadata, image_bytes, detected_labels=None, detections_detail=None,is_valid=False, action="DISCARD", reason=None):
+    def _log_to_mongo(self, metadata, detected_labels=None, detections_detail=None,is_valid=False, action="UNPROCESSED", reason=None, minio_object_name=None):
         """
         Ghi log chi tiết mọi request vào MongoDB để phục vụ Dashboard.
         """
@@ -159,12 +200,12 @@ class ImageFilter:
                 "source": source,
                 "filename": filename,
                 "is_valid": is_valid,              # Kết quả logic: True/False
-                "action": action,                  # Hành động: KEEP/DISCARD
+                "action": action,                  # Hành động: KEEP/DISCARD -> Mở rộng thêm như UNPROCESSED để xử lý sau
                 "detected_labels": detected_labels if detected_labels else [],
                 "detections_detail": detections_detail if detections_detail else [],
-                "reason": reason,                 
-                
-                "image_data": Binary(image_bytes) if image_bytes else None,
+                "reason": reason,
+                "minio_image_path": minio_object_name, # Lưu tên file trên MinIO
+                "storage_type": "minio" if minio_object_name else "none",        
                 "raw_metadata": meta
             }
 

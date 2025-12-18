@@ -9,9 +9,17 @@ from filter import ImageFilter
 from secrets_config import API_KEYS #type:ignore
 from fastapi.security.api_key import APIKeyHeader  #type:ignore
 from starlette.status import HTTP_403_FORBIDDEN  #type:ignore
-from dotenv import load_dotenv
+from dotenv import load_dotenv #type:ignore
 load_dotenv()
-MODEL_PATH = os.getenv("MODEL_PATH", "finetuned_nc126_best_mAP.onnx")
+
+MINIO_CONFIG = {
+    "endpoint": os.getenv("MINIO_ENDPOINT", "192.168.1.50:9000"), # IP và Port MinIO server
+    "access_key": os.getenv("MINIO_ACCESS_KEY", "minhminio"), # User đăng nhập
+    "secret_key": os.getenv("MINIO_SECRET_KEY", "minhminio"), # password
+    "bucket_name": "filter-images-bucket", # Tên bucket muốn lưu
+    "secure": False # Đặt True nếu MinIO công ty có https
+}
+MODEL_PATH = os.getenv("MODEL_PATH")
 MONGO_URI = os.getenv("MONGO_URI")
 DB_NAME = "api_request_log" 
 COLLECTION_NAME = "api_unlabeled_images"
@@ -86,6 +94,7 @@ def startup_event():
                 db_name=DB_NAME,
                 collection_name=COLLECTION_NAME,
                 target_classes=TARGET_CLASSES,
+                minio_config=MINIO_CONFIG,
                 enable_filter=True,
                 device=0,
                 class_mapping=CLASS_MAPPING
@@ -137,11 +146,11 @@ async def filter_image(
 
     # Trả kết quả JSON
     conf_list = [d.get('confidence', 0) for d in details] if details else []
-
+    action_result = "KEEP" if is_valid else "UNPROCESSED"
     return {
         "filename": file.filename,
         "is_valid": is_valid,
-        "action": "KEEP" if is_valid else "DISCARD",
+        "action": action_result,
         "detected_labels": labels, # List tên các vật thể
         "detections": details,     # Chứa full info: Box, Name, Confidence
         "confidence": conf_list,   
