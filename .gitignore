@@ -1,15 +1,13 @@
-filterenv/
-Filter-API/filterenv/
-venv/
-env/
+# Ignore credentials
+credentials/
+.env
+
+# Ignore binary
+bin/
+
+# Ignore Python cache
 __pycache__/
 *.pyc
-.env
-.DS_Store
-.vscode/
-*.onnx
-cloudflared.exe
-args_2.yaml
-secrets_config.py
-client_secrets.json
-token.json
+
+# Virtual Env
+filterenv/
