@@ -62,8 +62,8 @@ def ensure_api_keys_exist():
     print(f"💾 Đã lưu key vào '{file_name}'. Nhớ chạy build lại Docker nhé!")
 def get_cloudflare_url():
     print("🚀 Đang khởi động Cloudflare Tunnel...")
-    # Port 8000: Nếu bạn muốn Streamlit Cloud (Online) gọi về API máy bạn.
-    # Port 8501: Nếu bạn muốn gửi Link cho bạn bè xem Dashboard trên máy bạn.
+    # Port 8000: Streamlit Cloud (Online) gọi về API máy local.
+    # Port 8501: Public Streamlit ra ngoài.
     target_port = "8000"
     # Chạy lệnh cloudflared dưới nền (Subprocess) (Port API server = 8000) http://127.0.0.1:8000
     cmd = [exe_path, "tunnel", "--url", f"http://127.0.0.1:{target_port}"]

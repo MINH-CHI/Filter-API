@@ -12,18 +12,18 @@ from typing import List, Optional
 import json
 import time
 from app.core.filter import ImageFilter
-from secrets_config import API_KEYS #type:ignore
+from app.core.config import API_KEYS #type:ignore
 from fastapi.security.api_key import APIKeyHeader  #type:ignore
 from starlette.status import HTTP_403_FORBIDDEN  #type:ignore
 from dotenv import load_dotenv #type:ignore
 load_dotenv(env_path)
 
 MINIO_CONFIG = {
-    "endpoint": os.getenv("MINIO_ENDPOINT", "192.168.1.50:9000"), # IP và Port MinIO server
-    "access_key": os.getenv("MINIO_ACCESS_KEY", "minhminio"), # User đăng nhập
-    "secret_key": os.getenv("MINIO_SECRET_KEY", "minhminio"), # password
+    "endpoint": os.getenv("MINIO_ENDPOINT"), # IP và Port MinIO server
+    "access_key": os.getenv("MINIO_ACCESS_KEY"), # User đăng nhập
+    "secret_key": os.getenv("MINIO_SECRET_KEY"), # password
     "bucket_name": "filter-images-bucket", # Tên bucket muốn lưu
-    "secure": False # Đặt True nếu MinIO công ty có https
+    "secure": False # Đặt True nếu link là https:// , False nếu là http://
 }
 MODEL_PATH = os.getenv("MODEL_PATH")
 MONGO_URI = os.getenv("MONGO_URI")
