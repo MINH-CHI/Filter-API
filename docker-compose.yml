@@ -27,6 +27,7 @@ services:
       # Biến này giúp chặn torch tìm GPU, tránh lỗi
       # - CUDA_VISIBLE_DEVICES=-1
       - MODEL_PATH=finetuned_nc126_best_mAP.onnx
+      - MINIO_ENDPOINT=minio:9000
     deploy:
       resources:
         reservations:
@@ -36,6 +37,18 @@ services:
               capabilities: [gpu]
     networks:
       - mongoNetwork
+  minio:
+    image: minio/minio:latest
+    container_name: minio_server
+    ports:
+      - "9000:9000"       # Port API (Code python sẽ chọc vào đây)
+      - "9001:9001"       # Port Console (Giao diện web để xem ảnh)
+    environment:
+      MINIO_ROOT_USER: minioadmin       # Username đăng nhập
+      MINIO_ROOT_PASSWORD: minioadmin   # Password đăng nhập
+    command: server /data --console-address ":9001"
+    volumes:
+      - ./minio_data:/data
   # dashboard:
   #   build: . 
   #   container_name: my_streamlit_dashboard
