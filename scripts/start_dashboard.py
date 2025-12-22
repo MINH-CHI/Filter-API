@@ -7,8 +7,14 @@ import time
 import pymongo #type: ignore
 from datetime import datetime
 import os
+current_dir = os.path.dirname(os.path.abspath(__file__))
+project_root = os.path.dirname(current_dir)
+if project_root not in sys.path:
+    sys.path.append(project_root)
+exe_path = os.path.join(project_root, "bin", "cloudflared.exe")
+env_path = os.path.join(project_root, ".env")
 from dotenv import load_dotenv #type: ignore
-load_dotenv()
+load_dotenv(env_path)
 MONGO_URI = os.getenv("MONGO_URI") 
 DB_NAME = "api_request_log"
 CONFIG_COLLECTION = "system_config"
@@ -18,7 +24,8 @@ def ensure_api_keys_exist():
     Nếu chưa có -> Tạo mới.
     Nếu có rồi -> Bỏ qua (để tránh đổi key của người dùng).
     """
-    file_name = "secrets_config.py"
+    config_dir = os.path.join(project_root, "app", "core")
+    file_name = os.path.join(config_dir, "config.py")
     
     if os.path.exists(file_name):
         print(f"✅ Đã tìm thấy file '{file_name}'. Giữ nguyên Key cũ.")
@@ -55,16 +62,20 @@ def ensure_api_keys_exist():
     print(f"💾 Đã lưu key vào '{file_name}'. Nhớ chạy build lại Docker nhé!")
 def get_cloudflare_url():
     print("🚀 Đang khởi động Cloudflare Tunnel...")
-    
+    # Port 8000: Nếu bạn muốn Streamlit Cloud (Online) gọi về API máy bạn.
+    # Port 8501: Nếu bạn muốn gửi Link cho bạn bè xem Dashboard trên máy bạn.
+    target_port = "8000"
     # Chạy lệnh cloudflared dưới nền (Subprocess) (Port API server = 8000) http://127.0.0.1:8000
-    cmd = ["cloudflared.exe", "tunnel", "--url", "http://127.0.0.1:8000"]
+    cmd = [exe_path, "tunnel", "--url", f"http://127.0.0.1:{target_port}"]
     
     process = subprocess.Popen(
         cmd,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True, # Đọc output dưới dạng text
-        bufsize=1  # Đọc từng dòng (Line buffered)
+        bufsize=1,  # Đọc từng dòng (Line buffered)
+        encoding='utf-8', 
+        errors='replace'
     )
 
     url = None

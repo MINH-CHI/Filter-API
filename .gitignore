@@ -11,3 +11,6 @@ __pycache__/
 
 # Virtual Env
 filterenv/
+
+models/
+app/core/config.py
