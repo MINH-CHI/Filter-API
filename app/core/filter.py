@@ -23,7 +23,7 @@ class ImageFilter:
                 minio_config["endpoint"], # VD: "play.min.io:9000" hoặc IP nội bộ
                 access_key=minio_config["access_key"],
                 secret_key=minio_config["secret_key"],
-                secure=minio_config.get("secure", False) # True nếu dùng HTTPS
+                secure=minio_config["secure"] # True nếu dùng HTTPS
             )
             
             # Kiểm tra xem bucket có tồn tại không, nếu không thì tạo
