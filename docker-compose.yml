@@ -49,6 +49,9 @@ services:
     command: server /data --console-address ":9001"
     volumes:
       - ./minio_data:/data
+    networks:
+      - mongoNetwork
+    
   # dashboard:
   #   build: . 
   #   container_name: my_streamlit_dashboard
@@ -70,8 +73,8 @@ services:
   #   networks:
   #     - mongoNetwork
     
-volumes:
-  mongo1-data:
+# volumes:
+#   mongo1-data:
 
 networks:
   mongoNetwork:
