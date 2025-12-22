@@ -1,16 +1,22 @@
 import os
+import sys
+current_dir = os.path.dirname(os.path.abspath(__file__))
+project_root = os.path.dirname(current_dir)
+if project_root not in sys.path:
+    sys.path.append(project_root)
+env_path = os.path.join(project_root, ".env")
 import uvicorn #type:ignore
 from fastapi import FastAPI, File, UploadFile, HTTPException, Form, Depends, Security #type:ignore 
 from pydantic import BaseModel #type:ignore
 from typing import List, Optional
 import json
 import time
-from filter import ImageFilter
+from app.core.filter import ImageFilter
 from secrets_config import API_KEYS #type:ignore
 from fastapi.security.api_key import APIKeyHeader  #type:ignore
 from starlette.status import HTTP_403_FORBIDDEN  #type:ignore
 from dotenv import load_dotenv #type:ignore
-load_dotenv()
+load_dotenv(env_path)
 
 MINIO_CONFIG = {
     "endpoint": os.getenv("MINIO_ENDPOINT", "192.168.1.50:9000"), # IP và Port MinIO server
