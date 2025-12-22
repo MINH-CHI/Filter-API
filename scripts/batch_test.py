@@ -1,4 +1,5 @@
 import os
+import sys
 import io
 import requests # type:ignore
 import pandas as pd # type:ignore
@@ -12,8 +13,17 @@ from google.oauth2.credentials import Credentials # type:ignore
 from google_auth_oauthlib.flow import InstalledAppFlow # type:ignore
 from googleapiclient.discovery import build # type:ignore
 from googleapiclient.http import MediaIoBaseDownload # type:ignore
-load_dotenv()
-API_URL = "https://wrap-caroline-neutral-goat.trycloudflare.com/v1/filter"
+
+current_dir = os.path.dirname(os.path.abspath(__file__))
+project_root = os.path.dirname(current_dir)
+if project_root not in sys.path:
+    sys.path.append(project_root)
+CREDENTIALS_DIR = os.path.join(project_root, "credentials")
+TOKEN_FILE = os.path.join(CREDENTIALS_DIR, 'token.json')
+CLIENT_SECRETS_FILE = os.path.join(CREDENTIALS_DIR, 'client_secrets.json')
+ENV_PATH = os.path.join(project_root, ".env")
+load_dotenv(ENV_PATH)
+# API_URL = "https://wrap-caroline-neutral-goat.trycloudflare.com/v1/filter"
 API_KEY = os.getenv("API_KEY")
 DRIVE_BASE_FOLDER_NAME = "DATA"
 DRIVE_SUB_FOLDER_NAME = "object_detection"
@@ -23,10 +33,32 @@ TOKEN_FILE = 'token.json'
 MONGO_URI = os.getenv("MONGO_URI")
 DB_NAME = "api_request_log" 
 COLLECTION_NAME = "api_unlabeled_images"
+CONFIG_COLLECTION = "system_config"
 
-def get_mongo_collection():
-    client = MongoClient(MONGO_URI)
-    return client[DB_NAME][COLLECTION_NAME]
+def get_mongo_client():
+    return MongoClient(MONGO_URI)
+def get_active_api_url():
+    """
+    Hàm mới: Tự động lấy URL Cloudflare mới nhất từ MongoDB.
+    Giúp bạn không phải copy-paste link thủ công mỗi lần chạy lại Tunnel.
+    """
+    try:
+        client = get_mongo_client()
+        db = client[DB_NAME]
+        config = db[CONFIG_COLLECTION].find_one({"config_key": "active_api_url"})
+        
+        if config and "value" in config:
+            url = config["value"]
+            print(f"🔗 Đã lấy API URL từ Mongo: {url}")
+            # Đảm bảo URL kết thúc bằng /v1/filter
+            return f"{url}/v1/filter"
+        else:
+            print("⚠️ Không tìm thấy URL trong Mongo. Dùng URL mặc định.")
+            return "http://127.0.0.1:8000/v1/filter" # Fallback về Localhost
+            
+    except Exception as e:
+        print(f"⚠️ Lỗi lấy URL từ Mongo: {e}. Dùng Localhost.")
+        return "http://127.0.0.1:8000/v1/filter"
 def get_drive_service():
     creds = None
     if os.path.exists(TOKEN_FILE):
@@ -35,7 +67,7 @@ def get_drive_service():
         if creds and creds.expired and creds.refresh_token:
             creds.refresh(Request())
         else:
-            flow = InstalledAppFlow.from_client_secrets_file('client_secrets.json', ["https://www.googleapis.com/auth/drive"])
+            flow = InstalledAppFlow.from_client_secrets_file(CLIENT_SECRETS_FILE, ["https://www.googleapis.com/auth/drive"])
             creds = flow.run_local_server(port=0)
         with open(TOKEN_FILE, 'w') as token:
             token.write(creds.to_json())
@@ -152,12 +184,16 @@ def get_processed_filenames(collection):
 def run_test():
     print("🚀 Bắt đầu Script Batch Test...")
     
-    collection = get_mongo_collection()
+    api_url = get_active_api_url()
+    client = get_mongo_client()
+    collection = client[DB_NAME][COLLECTION_NAME]
     # Tùy chọn: Xóa dữ liệu cũ
     # collection.delete_many({"source": "batch_script_runner"})
-
+    
     service = get_drive_service()
-    if not service: return
+    if not service:
+        print("Không thể kết nối được Google Drive")
+        return
 
     tasks = build_task_list(service)
     print(f"📋 Tổng số ảnh cần test: {len(tasks)}")
@@ -167,7 +203,7 @@ def run_test():
         if t['filename'] not in processed_files:
             tasks_to_run.append(t)
 
-    for i, task in enumerate(tqdm(tasks_to_run, desc="Đang xử lý")):
+    for i, task in enumerate(tqdm(tasks_to_run, desc="Processing")):
         filename = task['filename']
         actual = task['actual_label']
         
@@ -189,7 +225,7 @@ def run_test():
                 headers = {"x-api-key": API_KEY}
                 
                 # Gọi API
-                resp = requests.post(API_URL, files=files, data=data, headers=headers, timeout=30)
+                resp = requests.post(api_url, files=files, data=data, headers=headers, timeout=30)
                 
                 if resp.status_code == 200:
                     res_json = resp.json()
@@ -250,7 +286,7 @@ def run_test():
 
         # Lưu vào Mongo
         collection.insert_one(result_record)
-        time.sleep(15)
+        time.sleep(5)
 
     print("✅ Đã hoàn thành test.")
 if __name__ == "__main__":
