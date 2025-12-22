@@ -44,8 +44,8 @@ services:
       - "9000:9000"       # Port API (Code python sẽ chọc vào đây)
       - "9001:9001"       # Port Console (Giao diện web để xem ảnh)
     environment:
-      MINIO_ROOT_USER: minioadmin       # Username đăng nhập
-      MINIO_ROOT_PASSWORD: minioadmin   # Password đăng nhập
+      MINIO_ROOT_USER: minhchisgod672006       # Username đăng nhập
+      MINIO_ROOT_PASSWORD: minhchitran@   # Password đăng nhập
     command: server /data --console-address ":9001"
     volumes:
       - ./minio_data:/data
