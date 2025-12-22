@@ -11,6 +11,6 @@ __pycache__/
 
 # Virtual Env
 filterenv/
-
+minio_data/
 models/
 app/core/config.py
