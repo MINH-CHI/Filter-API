@@ -5,8 +5,9 @@ import plotly.express as px #type:ignore
 import pymongo #type:ignore
 import os
 import sys
-current_dir = os.path.dirname(os.path.abspath(__file__))
-project_root = os.path.dirname(current_dir)
+dashboard_dir = os.path.dirname(os.path.abspath(__file__))
+app_dir = os.path.dirname(dashboard_dir)
+project_root = os.path.dirname(app_dir)
 if project_root not in sys.path:
     sys.path.append(project_root)
 env_path = os.path.join(project_root, ".env")
