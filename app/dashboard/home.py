@@ -50,8 +50,7 @@ def get_api_url_from_mongo():
         if doc and "value" in doc:
             return doc["value"]
     except Exception as e :
-        st.toast(f"Lỗi đọc MongoDB: {e}", icon="⚠️")
-        print(f"❌ Error: {e}")
+        st.error(f"Lỗi đọc MongoDB: {e}", icon="⚠️")
     return None
 
 cloud_url = get_api_url_from_mongo()
