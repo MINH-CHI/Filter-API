@@ -144,9 +144,9 @@ class ImageFilter:
             action_result = "UNPROCESSED"
             reason_msg = "No Objects Detected"
         else:
-            if custom_targets: 
+            if custom_targets:
                 targets_to_check = set(custom_targets)
-            else: 
+            else:
                 targets_to_check = self.target_classes
 
             intersect = detected_labels.intersection(targets_to_check)
@@ -183,7 +183,7 @@ class ImageFilter:
 
         return is_valid_result, list(detected_labels), detailed_info
 
-    def _log_to_mongo(self, metadata, detected_labels=None, detections_detail=None,is_valid=False, action="UNPROCESSED", reason=None, minio_object_name=None):
+    def _log_to_mongo(self, metadata, action, detected_labels=None, detections_detail=None,is_valid=False, reason=None, minio_object_name=None):
         """
         Ghi log chi tiết mọi request vào MongoDB để phục vụ Dashboard.
         """
