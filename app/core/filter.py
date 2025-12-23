@@ -161,7 +161,7 @@ class ImageFilter:
                 
         minio_path = None
         # Chỉ upload nếu là ảnh hợp lệ (Action là KEEP)
-        if is_valid_result and input_data: 
+        if is_valid_result and action_result == "KEEP" and input_data: 
             filename = metadata.get("filename", "unknown.jpg") if metadata else "unknown.jpg"
             minio_path = self._upload_to_minio(input_data, filename)
         # Ghi log mọi case vào MongoDB
