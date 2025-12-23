@@ -281,7 +281,7 @@ with tab3:
     st.header("🧪 Giám sát Batch Test (Real-time)")
     st.markdown("""
     > **Trạng thái:** Hiển thị kết quả từ `batch_test.py`.
-    > **Logic màu sắc:** 🟢 **KEEP** (Lấy) | 🟡 **SKIP** (Có vật thể nhưng không lấy) | 🔴 **UNPROCESSED** (Không thấy gì)
+    > **Logic màu sắc:** 🟢 **KEEP** (Lấy) | 🟡 **SKIP** (không lấy vì đã được học) | 🔴 **UNPROCESSED** (Không thấy gì)
     """)
 
     col_re1, col_re2, col_re3 = st.columns([1, 1, 4])

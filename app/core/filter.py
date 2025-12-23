@@ -1,4 +1,6 @@
 import torch #type: ignore
+import os
+import mimetypes
 import cv2 #type: ignore
 import numpy as np #type: ignore
 from pymongo import MongoClient, errors  #type: ignore
@@ -72,32 +74,49 @@ class ImageFilter:
         if img is None:
             print("[Warning] Dữ liệu bytes không phải là file ảnh hợp lệ hoặc bị hỏng.")
         return img
-    def _upload_to_minio(self, image_bytes, filename):
-        """Hàm upload ảnh lên MinIO và trả về đường dẫn object"""
+    def _upload_to_minio(self, image_bytes, full_path_name):
+        """
+        Upload ảnh lên MinIO.
+        :param full_path_name: Tên file có thể kèm folder (VD: 'retrain/image.jpg')
+        """
         if not self.minio_client:
             return None
         
         try:
-            # Tạo tên file duy nhất để tránh trùng lặp: timestamp_filename
-            timestamp_str = datetime.now().strftime("%Y%m%d_%H%M%S")
-            object_name = f"{timestamp_str}_{filename}"
+            # Tách thư mục và tên file riêng biệt
+            # VD: "retrain/anh.jpg" -> folder="retrain", filename="anh.jpg"
+            folder, filename = os.path.split(full_path_name)
             
-            # MinIO yêu cầu stream
+            timestamp_str = datetime.now().strftime("%Y%m%d_%H%M%S")
+            
+            # folder + timestamp + filename
+            # VD: "retrain" + "20251223_anh.jpg" -> "retrain/20251223_anh.jpg"
+            final_object_name = f"{timestamp_str}_{filename}"
+            if folder:
+                final_object_name = f"{folder}/{final_object_name}"
+            
+            # Tự động đoán Content-Type (image/jpeg hay image/png)
+            content_type, _ = mimetypes.guess_type(filename)
+            if not content_type:
+                content_type = "image/jpeg" # Fallback nếu không đoán được
+
+            # Upload
             data_stream = io.BytesIO(image_bytes)
             data_length = len(image_bytes)
             
             self.minio_client.put_object(
                 self.bucket_name,
-                object_name,
+                final_object_name, # Tên object đã chuẩn hóa
                 data_stream,
                 data_length,
-                content_type="image/jpeg" # Hoặc tự động detect
+                content_type=content_type 
             )
-            # Trả về object name (để sau này dashboard ghép link)
-            return object_name
+            
+            # Trả về đường dẫn để lưu vào MongoDB
+            return final_object_name
             
         except Exception as e:
-            print(f"[MINIO ERROR] Upload thất bại: {e}")
+            print(f"❌ [MINIO ERROR] Upload thất bại: {e}")
             return None
 
     def process(self, input_data, metadata=None,custom_targets=None):
@@ -159,11 +178,22 @@ class ImageFilter:
                 action_result = "SKIP"
                 reason_msg = "Objects detected but NOT in Target"
                 
-        minio_path = None
-        # Chỉ upload nếu là ảnh hợp lệ (Action là KEEP)
-        if is_valid_result and input_data: 
+        if input_data:
             filename = metadata.get("filename", "unknown.jpg") if metadata else "unknown.jpg"
-            minio_path = self._upload_to_minio(input_data, filename)
+            
+            if action_result == "KEEP":
+                # Thêm prefix "dataset/" vào trước tên file
+                save_name = f"dataset/{filename}" 
+                minio_path = self._upload_to_minio(input_data, save_name)
+                
+            # Ảnh model mù (UNPROCESSED)
+            elif action_result == "UNPROCESSED":
+                # Thêm prefix "retrain/" để gom riêng ra
+                save_name = f"retrain/{filename}"
+                minio_path = self._upload_to_minio(input_data, save_name)
+            # Model đã được học rồi nên skip
+            else:
+                pass
         # Ghi log mọi case vào MongoDB
         self._log_to_mongo(
             metadata=metadata,
