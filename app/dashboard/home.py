@@ -16,12 +16,20 @@ from PIL import Image #type:ignore
 import time
 from datetime import datetime, timedelta, time as dt_time
 
+def load_config(key, default_value = None):
+    if key in st.secrets:
+        return st.secrets[key]
+    return default_value
 st.set_page_config(page_title="AI Image Filter Dashboard", layout="wide", page_icon="🕵️")
 load_dotenv(env_path)
-MONGO_URI = os.getenv("MONGO_URI")
+# MONGO_URI = os.getenv("MONGO_URI")
 DB_NAME = "api_request_log"
 COLLECTION_NAME = "api_unlabeled_images" 
 CONFIG_COLLECTION = "system_config"
+
+MONGO_URI = load_config("MONGO_URI")
+DB_NAME = load_config("DB_NAME", "api_request_log")
+CONFIG_COLLECTION = load_config("CONFIG_COLLECTION", "system_config")
 
 @st.cache_resource # Kết nối 1 lần
 def init_mongo_client():
