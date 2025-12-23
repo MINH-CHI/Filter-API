@@ -58,7 +58,7 @@ if cloud_url:
     st.sidebar.success(f"🟢 Đã kết nối API: {BASE_URL.split('//')[1]}")
 else:
     # Cấu hình mặc định hoặc Local
-    BASE_URL = "http://localhost:8000"
+    BASE_URL = "https://guidance-assumption-dimension-london.trycloudflare.com"
     st.sidebar.warning("⚠️ Không tìm thấy URL từ Mongo, đang dùng Default.")
 
 if BASE_URL.endswith("/"): 
