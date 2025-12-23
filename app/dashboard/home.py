@@ -36,7 +36,7 @@ def init_mongo_client():
         st.toast(f"Đã kết nối tới mongo atlas thành công")
         return client
     except Exception as e:
-        st.toast(f"❌ Lỗi kết nối MongoDB: {e}", icon="🔥")
+        st.error(f"❌ Lỗi kết nối MongoDB: {e}", icon="🔥")
         return None
 
 def get_api_url_from_mongo():
