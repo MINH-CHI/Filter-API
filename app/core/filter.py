@@ -156,7 +156,7 @@ class ImageFilter:
                 action_result = "KEEP"
                 reason_msg = "Found Target Classes"
             else:
-                action_result = "UNPROCESSED"
+                action_result = "SKIP"
                 reason_msg = "Objects detected but NOT in Target"
                 
         minio_path = None
@@ -181,7 +181,7 @@ class ImageFilter:
                 if label in self.stats: 
                     self.stats[label] += 1
 
-        return is_valid_result, list(detected_labels), detailed_info
+        return is_valid_result, list(detected_labels), detailed_info , action_result
 
     def _log_to_mongo(self, metadata, action, detected_labels=None, detections_detail=None,is_valid=False, reason=None, minio_object_name=None):
         """

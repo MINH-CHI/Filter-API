@@ -281,7 +281,7 @@ with tab3:
     st.header("🧪 Giám sát Batch Test (Real-time)")
     st.markdown("""
     > **Trạng thái:** Hiển thị kết quả từ `batch_test.py`.
-    > **Cập nhật:** Đã hiển thị cột **Bounding Box**.
+    > **Logic màu sắc:** 🟢 **KEEP** (Lấy) | 🟡 **SKIP** (Có vật thể nhưng không lấy) | 🔴 **UNPROCESSED** (Không thấy gì)
     """)
 
     col_re1, col_re2, col_re3 = st.columns([1, 1, 4])
@@ -311,56 +311,90 @@ with tab3:
 
         total_test = len(df_test)
         
-        # Accuracy
+        # --- 1. CẬP NHẬT METRIC (THÊM SKIP) ---
         correct_count = df_test['is_correct'].sum()
         acc_val = (correct_count / total_test * 100) if total_test > 0 else 0.0
         
-        # Keep Rate
         keep_count = len(df_test[df_test['action'] == 'KEEP'])
+        skip_count = len(df_test[df_test['action'] == 'SKIP']) # <--- Metric mới
         
-        k1, k2, k3, k4 = st.columns(4)
+        k1, k2, k3, k4, k5 = st.columns(5) # Thêm 1 cột hiển thị
         k1.metric("Số mẫu đã Test", total_test)
-        k2.metric("Độ chính xác (Accuracy)", f"{acc_val:.1f}%")
-        k3.metric("Số ảnh Hợp lệ (KEEP)", keep_count)
-        k4.metric("Trạng thái mới nhất", df_test.iloc[0]['status'] if 'status' in df_test.columns else "N/A")
+        k2.metric("Độ chính xác", f"{acc_val:.1f}%")
+        k3.metric("🟢 KEEP", keep_count)
+        k4.metric("🟡 SKIP", skip_count) # <--- Hiển thị
+        k5.metric("Trạng thái", df_test.iloc[0]['status'] if 'status' in df_test.columns else "N/A")
 
         st.divider()
 
-        # Chia cột: Bảng chiếm 70%, Biểu đồ tròn chiếm 30%
+        # Chia cột: Bảng chiếm 70%, Biểu đồ chiếm 30%
         c1, c2 = st.columns([7, 3])
         
         with c1:
             st.subheader("📋 Chi tiết từng ảnh")
             
-            # Hàm tô màu
-            def highlight_correct(val):
-                return f'background-color: {"#d4edda" if val else "#f8d7da"}' # Xanh/Đỏ nhạt
+            # --- 2. CẬP NHẬT LOGIC TÔ MÀU (HIGHLIGHT ROW) ---
+            def highlight_row_by_action(row):
+                status = row.get("action", "")
+                
+                # Logic màu sắc: KEEP=Xanh, SKIP=Vàng, UNPROCESSED=Đỏ
+                if status == "KEEP":
+                    return ['background-color: #d4edda; color: #155724'] * len(row) # Xanh lá
+                elif status == "SKIP":
+                    return ['background-color: #fff3cd; color: #856404'] * len(row) # 🟡 Vàng cam
+                elif status == "UNPROCESSED":
+                    return ['background-color: #f8d7da; color: #721c24'] * len(row) # Đỏ
+                return [''] * len(row)
 
             display_cols = ['timestamp', 'filename', 'actual_label', 'predicted_label', 'bounding_box', 'confidence', 'action', 'is_correct']
             
-            # Format lại DataFrame
             df_display = df_test[[c for c in display_cols if c in df_test.columns]].copy()
             
+            # Sử dụng style.apply thay vì applymap để tô màu cả dòng
             st.dataframe(
-                df_display.style.applymap(highlight_correct, subset=['is_correct']),
+                df_display.style.apply(highlight_row_by_action, axis=1), 
                 use_container_width=True,
                 height=500
             )
 
         with c2:
-            st.subheader("📊 Tỷ lệ Chính xác")
+            st.subheader("📊 Thống kê")
             
-            # Hiển thị Pie Chart Accuracy (Đúng/Sai)
+            # Chart 1: Độ chính xác (Giữ nguyên)
+            st.caption("Độ chính xác (Model Predict)")
             res_counts = df_test['is_correct'].value_counts().reset_index()
             res_counts.columns = ['Kết quả', 'Số lượng']
             res_counts['Kết quả'] = res_counts['Kết quả'].map({True: 'ĐÚNG', False: 'SAI'})
             
             fig_acc = px.pie(res_counts, names='Kết quả', values='Số lượng', 
-                           color='Kết quả', 
-                           color_discrete_map={'ĐÚNG':'#28a745', 'SAI':'#dc3545'},
-                           hole=0.4)
+                            color='Kết quả', 
+                            color_discrete_map={'ĐÚNG':'#28a745', 'SAI':'#dc3545'},
+                            hole=0.4)
+            fig_acc.update_layout(showlegend=False, margin=dict(t=0, b=0, l=0, r=0), height=200)
             st.plotly_chart(fig_acc, use_container_width=True)
+            
+            st.divider()
+
+            # --- 3. CHART MỚI: PHÂN BỐ ACTION (KEEP/SKIP/UNPROCESSED) ---
+            st.caption("Tỷ lệ Xử lý (Action)")
+            if 'action' in df_test.columns:
+                action_counts = df_test['action'].value_counts().reset_index()
+                action_counts.columns = ['Hành động', 'Số lượng']
+                
+                # Map màu chuẩn
+                color_map_action = {
+                    "KEEP": "#28a745",       # Xanh
+                    "SKIP": "#ffc107",       # Vàng
+                    "UNPROCESSED": "#dc3545" # Đỏ
+                }
+                
+                fig_action = px.pie(action_counts, names='Hành động', values='Số lượng',
+                                    color='Hành động',
+                                    color_discrete_map=color_map_action,
+                                    hole=0.4)
+                fig_action.update_layout(showlegend=True, margin=dict(t=0, b=0, l=0, r=0), height=200)
+                st.plotly_chart(fig_action, use_container_width=True)
 
     if auto_refresh_tab3:
-        time.sleep(15) # Refresh
+        time.sleep(15) 
         st.rerun()
