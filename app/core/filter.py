@@ -138,6 +138,8 @@ class ImageFilter:
                 detected_labels.add(label_name)
         
         # Model trả về None (Không phát hiện gì hoặc confidence thấp)
+        action_result = ""
+        is_valid_result = False # Default
         if not detected_labels:
             action_result = "UNPROCESSED"
             reason_msg = "No Objects Detected"
@@ -157,8 +159,10 @@ class ImageFilter:
             else:
                 action_result = "UNPROCESSED"
                 reason_msg = "Objects detected but NOT in Target"
+                
         minio_path = None
-        if input_data:
+        # Chỉ upload nếu là ảnh hợp lệ (Action là KEEP)
+        if is_valid_result and input_data: 
             filename = metadata.get("filename", "unknown.jpg") if metadata else "unknown.jpg"
             minio_path = self._upload_to_minio(input_data, filename)
         # Ghi log mọi case vào MongoDB

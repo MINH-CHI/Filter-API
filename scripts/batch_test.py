@@ -254,7 +254,7 @@ def run_test():
                     # Logic kiểm tra đúng sai
                     is_correct = False
                     if task['category_type'].lower() == "unknown":
-                        is_correct = (not detected_labels) or (action == "DISCARD")
+                        is_correct = (not detected_labels) or (action == "UNPROCESSED")
                     else:
                         actual_norm = str(actual).lower().strip()
                         for lbl in detected_labels:
