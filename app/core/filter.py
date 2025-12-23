@@ -177,6 +177,7 @@ class ImageFilter:
             else:
                 action_result = "SKIP"
                 reason_msg = "Objects detected but NOT in Target"
+                
         minio_path = None        
         if input_data:
             filename = metadata.get("filename", "unknown.jpg") if metadata else "unknown.jpg"
