@@ -2,7 +2,7 @@ import streamlit as st #type:ignore
 import requests #type:ignore
 import pandas as pd #type:ignore
 import plotly.express as px #type:ignore
-import pymongo #type:ignore
+from pymongo import MongoClient #type:ignore
 import os
 import sys
 from dotenv import load_dotenv #type: ignore
@@ -29,7 +29,7 @@ def init_mongo_client():
     if not MONGO_URI:
         return None
     try:
-        client = pymongo.MongoClient(MONGO_URI, serverSelectionTimeoutMS=3000)
+        client = MongoClient(MONGO_URI, serverSelectionTimeoutMS=3000)
         client.server_info()  # Trigger kiểm tra kết nối
         return client
     except Exception as e:
