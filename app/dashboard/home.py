@@ -46,7 +46,7 @@ def get_api_url_from_mongo():
         db = client[DB_NAME]
         coll = db[CONFIG_COLLECTION]
         
-        doc = coll.find_one({"config_key": "active_api_url"})
+        doc = coll.find_one({"config_key":"active_api_url"})
         if doc and "value" in doc:
             return doc["value"]
     except Exception as e :
