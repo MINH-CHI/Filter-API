@@ -28,15 +28,15 @@ CONFIG_COLLECTION = "system_config"
 def init_mongo_client():
     """Khởi tạo kết nối MongoDB và cache lại để dùng chung."""
     if not MONGO_URI:
-        st.toast(f"❌ Không tìm thấy URI của MongoDB: {e}", icon="🔥")
+        st.error("❌ Lỗi: Biến môi trường MONGO_URI chưa được cài đặt!", icon="🚫")
         return None
     try:
         client = MongoClient(MONGO_URI, serverSelectionTimeoutMS=3000)
-        client.server_info()  # Trigger kiểm tra kết nối
+        client.admin.command('ping')
         st.toast(f"Đã kết nối tới mongo atlas thành công")
         return client
     except Exception as e:
-        st.error(f"❌ Lỗi kết nối MongoDB: {e}", icon="🔥")
+        st.error(f"❌ Không thể kết nối MongoDB Atlas: {e}", icon="🔥")
         return None
 
 def get_api_url_from_mongo():
