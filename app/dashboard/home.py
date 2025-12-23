@@ -43,7 +43,7 @@ def get_api_url_from_mongo():
     return None
 
 cloud_url = get_api_url_from_mongo()
-
+BASE_URL = ""
 if cloud_url:
     BASE_URL = cloud_url
     st.sidebar.success(f"🟢 Đã kết nối API: {BASE_URL.split('//')[1]}")
