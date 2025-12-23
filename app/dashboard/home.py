@@ -6,8 +6,8 @@ import pymongo #type:ignore
 import os
 import sys
 dashboard_dir = os.path.dirname(os.path.abspath(__file__))
-app_dir = os.path.dirname(dashboard_dir)
-project_root = os.path.dirname(app_dir)
+# app_dir = os.path.dirname(dashboard_dir)
+project_root = os.path.dirname(dashboard_dir)
 if project_root not in sys.path:
     sys.path.append(project_root)
 env_path = os.path.join(project_root, ".env")
