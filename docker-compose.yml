@@ -19,8 +19,9 @@ services:
     restart: always
     ports:
       - "8000:8000"
-    # depends_on:
+    depends_on:
     #   - mongo1
+      - minio
     environment:
       # - MONGO_URI=mongodb://admin:password123@mongo1:27017
       - MONGO_URI=mongodb+srv://minhchisgod672006:minhchitran1@minh-cluster.ov4wdff.mongodb.net/?appName=Minh-Cluster
@@ -28,6 +29,10 @@ services:
       # - CUDA_VISIBLE_DEVICES=-1
       - MODEL_PATH=models/finetuned_nc126_best_mAP.onnx
       - MINIO_ENDPOINT=minio:9000
+      - MINIO_ACCESS_KEY=minhchisgod672006
+      - MINIO_SECRET_KEY=minhchitran@
+      - MINIO_BUCKET_NAME=filter-images-bucket
+      - MINIO_SECURE=False
     deploy:
       resources:
         reservations:
@@ -44,8 +49,8 @@ services:
       - "9000:9000"       # Port API (Code python sẽ chọc vào đây)
       - "9001:9001"       # Port Console (Giao diện web để xem ảnh)
     environment:
-      MINIO_ROOT_USER: minhchisgod672006       # Username đăng nhập
-      MINIO_ROOT_PASSWORD: minhchitran@   # Password đăng nhập
+      MINIO_ROOT_USER: minhchisgod672006     # Username đăng nhập
+      MINIO_ROOT_PASSWORD:  minhchitran@  # Password đăng nhập
     command: server /data --console-address ":9001"
     volumes:
       - ./minio_data:/data
