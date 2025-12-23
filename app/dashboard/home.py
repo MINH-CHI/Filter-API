@@ -45,7 +45,8 @@ def get_api_url_from_mongo():
         doc = coll.find_one({"config_key": "active_api_url"})
         if doc and "value" in doc:
             return doc["value"]
-    except Exception:
+    except Exception as e :
+        print(f"Có lỗi {repr(e)}")
         pass
     return None
 
