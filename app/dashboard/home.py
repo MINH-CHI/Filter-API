@@ -4,11 +4,17 @@ import pandas as pd #type:ignore
 import plotly.express as px #type:ignore
 import pymongo #type:ignore
 import os
+import sys
+current_dir = os.path.dirname(os.path.abspath(__file__))
+project_root = os.path.dirname(current_dir)
+if project_root not in sys.path:
+    sys.path.append(project_root)
+env_path = os.path.join(project_root, ".env")
 from dotenv import load_dotenv #type: ignore
 from PIL import Image #type:ignore
 import time
 from datetime import datetime, timedelta, time as dt_time
-load_dotenv()
+load_dotenv(env_path)
 st.set_page_config(page_title="AI Image Filter Dashboard", layout="wide", page_icon="🕵️")
 
 MONGO_URI = os.getenv("MONGO_URI")
