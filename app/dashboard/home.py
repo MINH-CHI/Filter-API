@@ -28,6 +28,7 @@ CONFIG_COLLECTION = "system_config"
 def init_mongo_client():
     """Khởi tạo kết nối MongoDB và cache lại để dùng chung."""
     if not MONGO_URI:
+        st.toast(f"❌ Không tìm thấy URI của MongoDB: {e}", icon="🔥")
         return None
     try:
         client = MongoClient(MONGO_URI, serverSelectionTimeoutMS=3000)
@@ -49,7 +50,7 @@ def get_api_url_from_mongo():
         if doc and "value" in doc:
             return doc["value"]
     except Exception as e :
-        st.toast(f"⚠️ Lỗi đọc MongoDB: {e}", icon="⚠️")
+        st.toast(f"Lỗi đọc MongoDB: {e}", icon="⚠️")
         print(f"❌ Error: {e}")
     return None
 
