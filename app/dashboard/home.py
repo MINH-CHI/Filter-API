@@ -21,7 +21,7 @@ def load_config(key, default_value = None):
         return st.secrets[key]
     return default_value
 st.set_page_config(page_title="AI Image Filter Dashboard", layout="wide", page_icon="🕵️")
-load_dotenv(env_path)
+# load_dotenv(env_path)
 # MONGO_URI = os.getenv("MONGO_URI")
 DB_NAME = "api_request_log"
 COLLECTION_NAME = "api_unlabeled_images" 
