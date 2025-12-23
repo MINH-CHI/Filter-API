@@ -23,7 +23,8 @@ MONGO_URI = os.getenv("MONGO_URI")
 DB_NAME = "api_request_log"
 COLLECTION_NAME = "api_unlabeled_images" 
 CONFIG_COLLECTION = "system_config"
-@st.cache_resource
+
+@st.cache_resource # Kết nối 1 lần
 def init_mongo_client():
     """Khởi tạo kết nối MongoDB và cache lại để dùng chung."""
     if not MONGO_URI:
@@ -47,8 +48,8 @@ def get_api_url_from_mongo():
         if doc and "value" in doc:
             return doc["value"]
     except Exception as e :
-        st.toast(f"Lỗi khi lấy url của cloudflared {e}")
-        pass
+        st.toast(f"⚠️ Lỗi đọc MongoDB: {e}", icon="⚠️")
+        print(f"❌ Error: {e}")
     return None
 
 cloud_url = get_api_url_from_mongo()
