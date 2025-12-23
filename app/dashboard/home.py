@@ -47,7 +47,7 @@ def get_api_url_from_mongo():
         if doc and "value" in doc:
             return doc["value"]
     except Exception as e :
-        print(f"Có lỗi {repr(e)}")
+        st.toast(f"Lỗi khi lấy url của cloudflared {e}")
         pass
     return None
 
