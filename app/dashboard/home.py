@@ -32,6 +32,7 @@ def init_mongo_client():
     try:
         client = MongoClient(MONGO_URI, serverSelectionTimeoutMS=3000)
         client.server_info()  # Trigger kiểm tra kết nối
+        print(f"Đã kết nối tới mongo atlas thành công")
         return client
     except Exception as e:
         st.toast(f"❌ Lỗi kết nối MongoDB: {e}", icon="🔥")
