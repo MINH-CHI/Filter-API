@@ -143,7 +143,6 @@ class ImageFilter:
         if not detected_labels:
             action_result = "UNPROCESSED"
             reason_msg = "No Objects Detected"
-            is_valid_result = False 
         else:
             if custom_targets: 
                 targets_to_check = set(custom_targets)
