@@ -12,13 +12,12 @@ project_root = os.path.dirname(app_dir)
 if project_root not in sys.path:
     sys.path.append(project_root)
 env_path = os.path.join(project_root, ".env")
-load_dotenv(env_path)
 from PIL import Image #type:ignore
 import time
 from datetime import datetime, timedelta, time as dt_time
 
 st.set_page_config(page_title="AI Image Filter Dashboard", layout="wide", page_icon="🕵️")
-
+load_dotenv(env_path)
 MONGO_URI = os.getenv("MONGO_URI")
 DB_NAME = "api_request_log"
 COLLECTION_NAME = "api_unlabeled_images" 
