@@ -26,7 +26,7 @@ class ImageFilter:
             self.bucket_name = minio_config.get("bucket_name", "images")
             try:
                 self.minio_client = Minio(
-                    "minio:9000", # minio:9000 / localhost:9000
+                    endpoint= minio_config['endpoint'], # minio:9000 / localhost:9000
                     access_key=minio_config["access_key"],
                     secret_key=minio_config["secret_key"],
                     secure=minio_config["secure"] # True nếu dùng HTTPS
