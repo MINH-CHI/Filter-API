@@ -19,6 +19,8 @@ services:
       dockerfile: dockerfile
     container_name: my_python_api
     restart: always
+    env_file:
+      - .env
     ports:
       - "8000:8000"
     depends_on:
@@ -30,11 +32,6 @@ services:
       # Biến này giúp chặn torch tìm GPU, tránh lỗi
       # - CUDA_VISIBLE_DEVICES=-1
       - MODEL_PATH=models/finetuned_nc126_best_mAP.onnx
-      - MINIO_ENDPOINT=minio:9000
-      - MINIO_ACCESS_KEY=minhchisgod672006
-      - MINIO_SECRET_KEY=minhchitran@
-      - MINIO_BUCKET_NAME=filter-images-bucket
-      - MINIO_SECURE=False
     deploy:
       resources:
         reservations:

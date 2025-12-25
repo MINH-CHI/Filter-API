@@ -54,7 +54,7 @@ class ImageFilter:
         elif mongo_uri and db_name and collection_name:
             self.mongo_client = MongoClient(mongo_uri, serverSelectionTimeoutMS = 5000)
             self.db = self.mongo_client[db_name]
-            self.collection = self.df[collection_name]
+            self.collection = self.db[collection_name]
             self.mongo_client.server_info()
             print(f"[INFOR] Đã kết nối tới Mongo ở database: {db_name}")
             self.log_handler = self._log_to_mongo
@@ -68,7 +68,7 @@ class ImageFilter:
             # Check nhanh xem máy host có nhận GPU không
             if self.device == 0 and not torch.cuda.is_available():
                 print("[WARNING] Đã chọn GPU nhưng Torch không tìm thấy CUDA -> Không được dùng")
-                return 
+                return
             else:
                 print(f"Đang sử dụng thiết bị: {self.device}")
             print(f"[INFO] Đang load model từ {model_path}...")# Tải model
