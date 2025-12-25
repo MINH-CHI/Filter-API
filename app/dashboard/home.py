@@ -32,7 +32,7 @@ CONFIG_COLLECTION = "system_config"
 MONGO_URI = load_config("MONGO_URI")
 DB_NAME = load_config("DB_NAME", "api_request_log")
 CONFIG_COLLECTION = load_config("CONFIG_COLLECTION", "system_config")
-MINIO_ENDPOINT = load_config("MINIO_ENDPOINT","127.0.0.1:9000")
+MINIO_ENDPOINT = load_config("MINIO_ENDPOINT","localhost:9000")
 MINIO_ACCESS_KEY = load_config("MINIO_ACCESS_KEY")
 MINIO_SECRET_KEY = load_config("MINIO_SECRET_KEY")
 MINIO_BUCKET = load_config("MINIO_BUCKET_NAME")
@@ -271,14 +271,19 @@ with tab2:
                     # Tải ảnh từ MinIO & Vẽ Box
                     if minio and minio_path:
                         try:
+                            print(f"Bắt đầu nhận phản hồi từ object: {minio_path}")
                             response = minio.get_object(MINIO_BUCKET, minio_path)
-                            img_data = response.read()
-                            response.close()
-                            response.release_conn()
-                            
-                            # Vẽ box
-                            final_img = annotate_image(img_data, detections)
-                            st.image(final_img, use_container_width=True)
+                            if response.status == 200:
+                                print("Trạng thái phản hồi tốt")
+                                img_data = response.read()
+                                response.close()
+                                response.release_conn()
+                                
+                                # Vẽ box
+                                final_img = annotate_image(img_data, detections)
+                                st.image(final_img, use_container_width=True)
+                            else:
+                                print("Không có phản hồi")
                         except Exception as e:
                             st.error(f"Lỗi tải ảnh: {e}")
                     else:
