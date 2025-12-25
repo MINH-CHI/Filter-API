@@ -53,7 +53,7 @@ def init_minio_client():
         MINIO_ENDPOINT,
         access_key=MINIO_ACCESS_KEY,
         secret_key=MINIO_SECRET_KEY,
-        secure=MINIO_SECURE
+        secure=False
     )
     return client
 def annotate_image(image_source, detections):
