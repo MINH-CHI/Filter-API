@@ -1,19 +1,35 @@
+# fastapi
+# uvicorn
+# python-multipart
+# minio
+# pymongo
+# opencv-python-headless
+# numpy
+# pydantic
+# ultralytics
+# requests
+# python-dotenv
+# Pillow
+# streamlit
+# plotly
+# pandas
+# dnspython
+# onnx>=1.14.0
+# onnxruntime-gpu
+# email-validator
+# --- Web Framework & Server ---
 fastapi
 uvicorn
 python-multipart
-minio
-pymongo
-opencv-python-headless
-numpy
 pydantic
-ultralytics
-requests
-python-dotenv
-Pillow
-streamlit
-plotly
-pandas
-dnspython
-onnx>=1.14.0
-onnxruntime-gpu
 email-validator
+
+# --- Database & Storage ---
+pymongo
+minio
+dnspython
+
+# --- App Utilities ---
+python-dotenv
+requests
+streamlit

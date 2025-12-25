@@ -4,7 +4,9 @@ import pandas as pd #type:ignore
 import plotly.express as px #type:ignore
 from pymongo import MongoClient #type:ignore
 import os
+import io
 import sys
+from minio import Minio
 from dotenv import load_dotenv #type: ignore
 dashboard_dir = os.path.dirname(os.path.abspath(__file__))
 app_dir = os.path.dirname(dashboard_dir)
@@ -12,14 +14,14 @@ project_root = os.path.dirname(app_dir)
 if project_root not in sys.path:
     sys.path.append(project_root)
 env_path = os.path.join(project_root, ".env")
-from PIL import Image #type:ignore
+from PIL import Image, ImageDraw, ImageFont #type:ignore
 import time
 from datetime import datetime, timedelta, time as dt_time
 
 def load_config(key, default_value = None):
     if key in st.secrets:
         return st.secrets[key]
-    return default_value
+    return os.getenv(key, default_value)
 st.set_page_config(page_title="AI Image Filter Dashboard", layout="wide", page_icon="🕵️")
 # load_dotenv(env_path)
 # MONGO_URI = os.getenv("MONGO_URI")
@@ -30,7 +32,11 @@ CONFIG_COLLECTION = "system_config"
 MONGO_URI = load_config("MONGO_URI")
 DB_NAME = load_config("DB_NAME", "api_request_log")
 CONFIG_COLLECTION = load_config("CONFIG_COLLECTION", "system_config")
-
+MINIO_ENDPOINT = load_config("MINIO_ENDPOINT")
+MINIO_ACCESS_KEY = load_config("MINIO_ACCESS_KEY")
+MINIO_SECRET_KEY = load_config("MINIO_SECRET_KEY")
+MINIO_BUCKET = load_config("MINIO_BUCKET_NAME")
+MINIO_SECURE = load_config("MINIO_SECURE", False)
 @st.cache_resource # Kết nối 1 lần
 def init_mongo_client():
     """Khởi tạo kết nối MongoDB và cache lại để dùng chung."""
@@ -41,7 +47,43 @@ def init_mongo_client():
         return client
     except Exception as e:
         return None
+@st.cache_resource
+def init_minio_client():
+    client = Minio(
+        MINIO_ENDPOINT,
+        access_key=MINIO_ACCESS_KEY,
+        secret_key=MINIO_SECRET_KEY,
+        secure=MINIO_SECURE
+    )
+    return client
+def annotate_image(image_source, detections):
+    if isinstance(image_source, bytes):
+        image = Image.open(io.BytesIO(image_source)).convert('RGB')
+    else:
+        image = image_source.copy().convert("RGB")
+    
+    draw = ImageDraw.Draw(image)
+    try:
+        font = ImageFont.truetype("arial.ttf", 20)
+    except:
+        font = ImageFont.load_default()
 
+    for det in detections:
+        box = det.get("box") # Format: [x1, y1, x2, y2]
+        label = det.get("object", "obj")
+        conf = det.get("confidence", 0.0)
+        
+        if box and len(box) == 4:
+            # Vẽ khung
+            draw.rectangle(box, outline="red", width=3)
+            
+            # Vẽ nhãn nền đỏ chữ trắng
+            text = f"{label} {conf:.2f}"
+            text_bbox = draw.textbbox((box[0], box[1]), text, font=font)
+            draw.rectangle(text_bbox, fill="red")
+            draw.text((box[0], box[1]), text, fill="white", font=font)
+            
+    return image
 def get_api_url_from_mongo():
     """Lấy API URL mới nhất từ MongoDB"""
     try:
@@ -57,15 +99,7 @@ def get_api_url_from_mongo():
     return None
 
 cloud_url = get_api_url_from_mongo()
-BASE_URL = ""
-if cloud_url:
-    BASE_URL = cloud_url
-    st.sidebar.success(f"🟢 Đã kết nối API: {BASE_URL.split('//')[1]}")
-else:
-    # Cấu hình mặc định hoặc Local
-    BASE_URL = "https://guidance-assumption-dimension-london.trycloudflare.com"
-    st.sidebar.warning("⚠️ Không tìm thấy URL từ Mongo, đang dùng Default.")
-
+BASE_URL = cloud_url if cloud_url else "http://127.0.0.1:8000"
 if BASE_URL.endswith("/"): 
     BASE_URL = BASE_URL[:-1]
 API_URL = f"{BASE_URL}/v1/filter"
@@ -132,151 +166,123 @@ if not api_key:
     st.warning("⚠️ Vui lòng nhập **API Key** ở thanh bên trái (Sidebar) để bắt đầu sử dụng.")
     st.stop()
 
-tab1, tab2, tab3 = st.tabs(["🚀 Demo Lọc Ảnh", "📊 Giám sát Live", "🧪 Phân tích Batch Test"])
+tab1, tab2, tab3 = st.tabs(["🚀 Demo & Visualize", "📸 Giám sát Live (Lazy Load)", "🧪 Phân tích Batch Test"])
 
 with tab1:
-    st.header("Test Model AI")
-    st.write("Upload ảnh để kiểm tra xem AI nhận diện và bộ lọc hoạt động như thế nào.")
-
+    st.header("Test Model & Vẽ Bounding Box")
     col1, col2 = st.columns([1, 1])
     
     with col1:
-        uploaded_file = st.file_uploader("Chọn ảnh (JPG, PNG)", type=['jpg', 'png', 'jpeg'])
-        
+        uploaded_file = st.file_uploader("Upload ảnh", type=['jpg', 'png', 'jpeg'])
         if uploaded_file:
-            # Hiển thị ảnh
-            image = Image.open(uploaded_file)
-            st.image(image, caption="Ảnh gốc", use_container_width=True)
+            # Hiển thị ảnh gốc trước
+            original_image = Image.open(uploaded_file)
+            st.image(original_image, caption="Ảnh gốc", use_container_width=True)
             
-            # Nút gọi API
-            if st.button("🔍 Quét ngay", type="primary"):
-                with st.spinner('Đang gửi request kèm API Key...'):
+            if st.button("🔍 Quét & Vẽ Box", type="primary"):
+                with st.spinner('Đang xử lý...'):
                     try:
-                        # Reset file pointer
                         uploaded_file.seek(0)
-                        
                         files = {'file': uploaded_file}
-                        data = {'source': 'streamlit_dashboard'}
-                        
-                        # Headers với API Key
+                        data = {'source': 'streamlit_demo'}
                         headers = {'x-api-key': api_key}
                         
-                        # GỌI API
                         response = requests.post(API_URL, files=files, data=data, headers=headers)
                         
                         if response.status_code == 200:
                             result = response.json()
-                            
                             with col2:
-                                st.subheader("Kết quả AI:")
-                                
-                                # Logic hiển thị mới dựa trên 'action'
+                                st.subheader("Kết quả AI")
                                 action = result.get('action', 'UNKNOWN')
-                                
-                                if action == 'KEEP':
-                                    st.success(f"✅ HỢP LỆ (KEEP)")
-                                    st.balloons()
-                                elif action == 'DISCARD':
-                                    st.error(f"❌ LOẠI BỎ (DISCARD)")
-                                else:
-                                    st.warning(f"⚠️ {action}")
-                                
-                                st.write(f"**Người dùng:** {result.get('user', 'Unknown')}")
-                                st.write("**Kết quả chi tiết:**")
-                                
                                 detections = result.get('detections', [])
                                 
-                                if detections:
-                                    # Nếu có thông tin confidence
-                                    for item in detections:
-                                        name = item.get('object', 'Unknown')
-                                        conf = item.get('confidence', 0)
-                                        st.write(f"- 🎯 **{name}**: `{conf * 100:.1f}%`")
-                                        st.progress(conf) 
-                                else:
-                                    st.write(result.get('detected_labels', []))
+                                # --- VẼ BOX LÊN ẢNH ---
+                                annotated_img = annotate_image(original_image, detections)
+                                st.image(annotated_img, caption=f"Ảnh đã xử lý ({len(detections)} objects)", use_container_width=True)
                                 
-                                with st.expander("Xem JSON phản hồi"):
-                                    st.json(result)
-                                    
-                        elif response.status_code == 403:
-                            st.error("⛔ BỊ TỪ CHỐI! API Key không đúng hoặc không có quyền.")
+                                # Hiển thị Action Label
+                                if action == 'KEEP': st.success(f"✅ HỢP LỆ (KEEP)")
+                                elif action == 'SKIP': st.warning(f"🟡 SKIP (Đúng nhưng không lấy)")
+                                else: st.error(f"❌ LOẠI BỎ ({action})")
+                                
+                                st.json(result) # Show JSON raw để debug
                         else:
-                            st.error(f"Lỗi API ({response.status_code}): {response.text}")
-                            
-                    except requests.exceptions.ConnectionError:
-                        st.error("⚠️ Không thể kết nối tới API! Server có đang bật không?")
+                            st.error(f"Lỗi API: {response.text}")
                     except Exception as e:
-                        st.error(f"Lỗi không xác định: {e}")
-
+                        st.error(f"Lỗi: {e}")
 with tab2:
-    st.header("Thống kê dữ liệu Log")
+    st.header("📸 Giám sát Dữ liệu Thực tế (Pagination)")
     
-    col_ctrl1, col_ctrl2 = st.columns([1, 4])
-    with col_ctrl1:
-        auto_refresh_tab2 = st.toggle("🔴 Live (5s)", value=False)
-    with col_ctrl2:
-        if st.button("🔄 Làm mới"): st.rerun()
-        
-    df = load_logs(start_date, end_date)
+    # 1. Load dữ liệu Metadata từ Mongo
+    client = init_mongo_client()
+    minio = init_minio_client()
     
-    if df is None:
-        st.error("❌ Lỗi kết nối MongoDB")
-    elif df.empty:
-        st.info(f"📭 Không có dữ liệu nào từ ngày {start_date} đến {end_date}.")
-    else:
-        # Chuẩn hóa cột
-        for col in ['action', 'detected_labels', 'user']:
-            if col not in df.columns: df[col] = None
+    if client:
+        db = client[DB_NAME]
+        coll = db[COLLECTION_NAME]
+        
+        # Query filter
+        start_dt = datetime.combine(start_date, dt_time.min)
+        end_dt = datetime.combine(end_date, dt_time.max)
+        query = {
+            "timestamp": {"$gte": start_dt, "$lte": end_dt},
+            "minio_image_path": {"$ne": None} # Chỉ lấy record có ảnh trên MinIO
+        }
+        
+        # Đếm tổng số lượng để phân trang
+        total_docs = coll.count_documents(query)
+        
+        # Cấu hình Pagination (Lazy Load giả lập)
+        PAGE_SIZE = 8 # Số ảnh mỗi lần load
+        if "page_number" not in st.session_state:
+            st.session_state.page_number = 0
             
-        # Metrics
-        total = len(df)
-        kept = len(df[df['action'] == 'KEEP'])
-        discarded = len(df[df['action'] == 'DISCARD'])
-        rate = (kept/total*100) if total else 0
-        
-        m1, m2, m3, m4 = st.columns(4)
-        m1.metric("Tổng Request (Range)", total)
-        m2.metric("✅ Clean", kept)
-        m3.metric("🗑️ Spam", discarded)
-        m4.metric("Tỷ lệ sạch", f"{rate:.1f}%")
-        
-        st.divider()
-        
-        # Charts
-        c1, c2 = st.columns(2)
-        with c1:
-            st.subheader("Tỷ lệ Lọc")
-            fig = px.pie(df, names='action', color='action', 
-                         color_discrete_map={'KEEP':'green', 'DISCARD':'red', 'UNKNOWN':'gray'})
-            st.plotly_chart(fig, use_container_width=True)
-            
-        with c2:
-            st.subheader("Top Users")
-            if 'user' in df.columns:
-                u_counts = df['user'].value_counts().reset_index()
-                u_counts.columns = ['User', 'Count']
-                fig_u = px.bar(u_counts, x='User', y='Count', color='User', text_auto=True)
-                st.plotly_chart(fig_u, use_container_width=True)
+        col_nav1, col_nav2, col_nav3 = st.columns([1, 2, 1])
+        with col_nav1:
+            if st.button("⬅️ Trang trước") and st.session_state.page_number > 0:
+                st.session_state.page_number -= 1
+                st.rerun()
+        with col_nav3:
+            if st.button("Trang sau ➡️") and (st.session_state.page_number + 1) * PAGE_SIZE < total_docs:
+                st.session_state.page_number += 1
+                st.rerun()
+        with col_nav2:
+            st.write(f"Đang hiển thị trang **{st.session_state.page_number + 1}** / {((total_docs // PAGE_SIZE) + 1)} (Tổng: {total_docs} ảnh)")
 
-        # Top Objects
-        st.subheader("🔍 Top Vật thể phát hiện")
-        exploded = df.explode('detected_labels').dropna(subset=['detected_labels'])
-        if not exploded.empty:
-            top_obj = exploded['detected_labels'].value_counts().head(15).reset_index()
-            top_obj.columns = ['Object', 'Count']
-            fig_bar = px.bar(top_obj, x='Count', y='Object', orientation='h', 
-                             text_auto=True, color='Count')
-            fig_bar.update_layout(yaxis=dict(autorange="reversed"))
-            st.plotly_chart(fig_bar, use_container_width=True)
-            
-        # Dataframe
-        st.subheader("📄 Chi tiết Log")
-        display_cols = ['timestamp', 'user', 'filename', 'action', 'detected_labels']
-        st.dataframe(df[[c for c in display_cols if c in df.columns]], use_container_width=True)
-    if auto_refresh_tab2:
-        time.sleep(13)
-        st.rerun()
+        # Lấy data theo trang (Skip & Limit)
+        cursor = coll.find(query).sort("timestamp", -1).skip(st.session_state.page_number * PAGE_SIZE).limit(PAGE_SIZE)
+        logs = list(cursor)
+        
+        if not logs:
+            st.info("Không có dữ liệu trong khoảng thời gian này.")
+        else:
+            # Hiển thị Grid 4 cột
+            cols = st.columns(4)
+            for idx, log in enumerate(logs):
+                with cols[idx % 4]:
+                    minio_path = log.get("minio_image_path")
+                    detections = log.get("detections_detail", [])
+                    action = log.get("action", "UNKNOWN")
+                    
+                    # Logic màu sắc Status
+                    status_color = "green" if action == "KEEP" else "orange" if action == "SKIP" else "red"
+                    st.markdown(f":{status_color}[**{action}**] - {log['timestamp'].strftime('%H:%M:%S')}")
+                    
+                    # Tải ảnh từ MinIO & Vẽ Box
+                    if minio and minio_path:
+                        try:
+                            response = minio.get_object(MINIO_BUCKET, minio_path)
+                            img_data = response.read()
+                            response.close()
+                            response.release_conn()
+                            
+                            # Vẽ box
+                            final_img = annotate_image(img_data, detections)
+                            st.image(final_img, use_container_width=True)
+                        except Exception as e:
+                            st.error(f"Lỗi tải ảnh: {e}")
+                    else:
+                        st.warning("MinIO chưa kết nối")
 with tab3:
     st.header("🧪 Giám sát Batch Test (Real-time)")
     st.markdown("""
@@ -311,18 +317,17 @@ with tab3:
 
         total_test = len(df_test)
         
-        # --- 1. CẬP NHẬT METRIC (THÊM SKIP) ---
         correct_count = df_test['is_correct'].sum()
         acc_val = (correct_count / total_test * 100) if total_test > 0 else 0.0
         
         keep_count = len(df_test[df_test['action'] == 'KEEP'])
-        skip_count = len(df_test[df_test['action'] == 'SKIP']) # <--- Metric mới
+        skip_count = len(df_test[df_test['action'] == 'SKIP']) 
         
-        k1, k2, k3, k4, k5 = st.columns(5) # Thêm 1 cột hiển thị
+        k1, k2, k3, k4, k5 = st.columns(5)
         k1.metric("Số mẫu đã Test", total_test)
         k2.metric("Độ chính xác", f"{acc_val:.1f}%")
         k3.metric("🟢 KEEP", keep_count)
-        k4.metric("🟡 SKIP", skip_count) # <--- Hiển thị
+        k4.metric("🟡 SKIP", skip_count)
         k5.metric("Trạng thái", df_test.iloc[0]['status'] if 'status' in df_test.columns else "N/A")
 
         st.divider()
@@ -333,7 +338,6 @@ with tab3:
         with c1:
             st.subheader("📋 Chi tiết từng ảnh")
             
-            # --- 2. CẬP NHẬT LOGIC TÔ MÀU (HIGHLIGHT ROW) ---
             def highlight_row_by_action(row):
                 status = row.get("action", "")
                 
@@ -360,7 +364,7 @@ with tab3:
         with c2:
             st.subheader("📊 Thống kê")
             
-            # Chart 1: Độ chính xác (Giữ nguyên)
+            # Chart 1: Độ chính xác
             st.caption("Độ chính xác (Model Predict)")
             res_counts = df_test['is_correct'].value_counts().reset_index()
             res_counts.columns = ['Kết quả', 'Số lượng']
@@ -375,7 +379,7 @@ with tab3:
             
             st.divider()
 
-            # --- 3. CHART MỚI: PHÂN BỐ ACTION (KEEP/SKIP/UNPROCESSED) ---
+            # CHART PHÂN BỐ ACTION (KEEP/SKIP/UNPROCESSED)
             st.caption("Tỷ lệ Xử lý (Action)")
             if 'action' in df_test.columns:
                 action_counts = df_test['action'].value_counts().reset_index()
@@ -396,5 +400,5 @@ with tab3:
                 st.plotly_chart(fig_action, use_container_width=True)
 
     if auto_refresh_tab3:
-        time.sleep(15) 
+        time.sleep(15)
         st.rerun()

@@ -1,0 +1,20 @@
+torch
+torchvision
+torchaudio
+# --- Deep Learning Core & Models ---
+# ultralytics sẽ tự kéo theo torch, torchvision, nhưng ta cài trước để cache
+ultralytics
+onnx>=1.14.0
+onnxruntime-gpu
+
+# --- Computer Vision ---
+opencv-python-headless
+Pillow
+
+# --- Data Science Core ---
+numpy
+pandas
+plotly
+
+# Lưu ý: Nếu bạn muốn Base Image bao gồm cả Torch (để tránh ultralytics cài lại),
+# bạn có thể thêm torch, torchvision vào đầu danh sách này.

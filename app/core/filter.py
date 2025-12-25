@@ -11,56 +11,68 @@ import io
 from minio import Minio #type: ignore
 from minio.error import S3Error #type: ignore
 class ImageFilter:
-    def __init__(self, model_path, mongo_uri, db_name, collection_name,target_classes, minio_config, enable_filter = True, device=0,class_mapping=None):
+    def __init__(self, model_path, mongo_uri, db_name, collection_name,target_classes, minio_config, image_handler = None, log_handler = None, enable_filter = True, device=0,class_mapping=None):
         self.class_mapping = class_mapping  
         self.enable_filter = enable_filter
         self.device = device
         self.target_classes = set(target_classes)
         self.stats = {label: 0 for label in target_classes} # Thống kê
         
-        self.minio_client = None
-        self.bucket_name = minio_config.get("bucket_name", "images")
-        try:
-            self.minio_client = Minio(
-                minio_config["endpoint"], # VD: "play.min.io:9000" hoặc IP nội bộ
-                access_key=minio_config["access_key"],
-                secret_key=minio_config["secret_key"],
-                secure=minio_config["secure"] # True nếu dùng HTTPS
-            )
-            
-            # Kiểm tra xem bucket có tồn tại không, nếu không thì tạo
-            if not self.minio_client.bucket_exists(self.bucket_name):
-                self.minio_client.make_bucket(self.bucket_name)
-                print(f"[MINIO] Đã tạo bucket mới: {self.bucket_name}")
-            else:
-                print(f"[MINIO] Đã kết nối bucket: {self.bucket_name}")
-                
-        except Exception as e:
-            print(f"[ERROR] ❌ Không thể kết nối MinIO: {e}")
+        if image_handler:
+            self.image_handler = image_handler
+            print("[INFOR] Đang sử dụng loại lưu trữ ảnh từ user")
+        elif minio_config:
             self.minio_client = None
+            self.bucket_name = minio_config.get("bucket_name", "images")
+            try:
+                self.minio_client = Minio(
+                    minio_config["endpoint"], # VD: "play.min.io:9000" hoặc IP nội bộ
+                    access_key=minio_config["access_key"],
+                    secret_key=minio_config["secret_key"],
+                    secure=minio_config["secure"] # True nếu dùng HTTPS
+                )
+                
+                # Kiểm tra xem bucket có tồn tại không, nếu không thì tạo
+                if not self.minio_client.bucket_exists(self.bucket_name):
+                    self.minio_client.make_bucket(self.bucket_name)
+                    print(f"[MINIO] Đã tạo bucket mới: {self.bucket_name}")
+                else:
+                    print(f"[MINIO] Đã kết nối bucket: {self.bucket_name}")
+                    
+            except Exception as e:
+                print(f"[ERROR] ❌ Không thể kết nối MinIO: {e}")
+                self.minio_client = None
+            self.image_handler = self._upload_to_minio
+            print("[INFOR] Đang sử dụng loại lưu trữ ảnh là MinIO")
+        else:
+            self.image_handler = lambda data, name : None
+            print("[Warning] Không có cấu hình lưu ảnh")
+        
+        if log_handler:
+            self.log_handler = log_handler
+            print("[INFOR] Đang dùng database do user tùy chỉnh")
+        elif mongo_uri and db_name and collection_name:
+            self.mongo_client = MongoClient(mongo_uri, serverSelectionTimeoutMS = 5000)
+            self.db = self.mongo_client[db_name]
+            self.collection = self.df[collection_name]
+            self.mongo_client.server_info()
+            print(f"[INFOR] Đã kết nối tới Mongo ở database: {db_name}")
+            self.log_handler = self._log_to_mongo
+            print("[INFO] Sử dụng Default MongoDB Handler.")
+        else:
+            self.log_handler = lambda **kwargs: print(f"[LOG] {kwargs.get('action')}")
+            print("[WARNING] Không có cấu hình Database. Log chỉ in ra console.")
+            
         
         if self.enable_filter:
             # Check nhanh xem máy host có nhận GPU không
             if self.device == 0 and not torch.cuda.is_available():
-                print("[WARNING] Đã chọn GPU nhưng Torch không tìm thấy CUDA -> sẽ tự động chuyển về CPU.")
-                self.device = 'cpu' # ÉP dùng GPU
+                print("[WARNING] Đã chọn GPU nhưng Torch không tìm thấy CUDA -> Không được dùng")
+                return 
             else:
                 print(f"Đang sử dụng thiết bị: {self.device}")
-
-        if self.enable_filter:
             print(f"[INFO] Đang load model từ {model_path}...")# Tải model
             self.model = YOLO(model_path,task="detect")
-
-            print(" [ÌNO] Đang kết nối MongoDB...") # kết nối mongo
-            try:
-                self.client = MongoClient(mongo_uri, serverSelectionTimeoutMS=5000)
-                self.db = self.client[db_name]
-                self.collection = self.db[collection_name]
-                # Test kết nối
-                self.client.server_info()
-            except errors.ServerSelectionTimeoutError as err:
-                print("[ERROR] Không thể kết nối MongoDB")
-                raise err
         else:
             print("Filter đang tắt. Mọi ảnh sẽ được chấp nhận.")
 
@@ -122,13 +134,13 @@ class ImageFilter:
     def process(self, input_data, metadata=None,custom_targets=None):
         # check cờ tắt/bật
         if not self.enable_filter:
-            return True, [], []
+            return True, [], [], "BYPASSED"
 
         # Decode ảnh
         img_numpy = self._bytes_to_image(input_data)
         if img_numpy is None:
             self._log_to_mongo(metadata,detected_labels=[], is_valid=False, action="UNPROCESSED", reason="Invalid Image Data (Decode Failed)")
-            return False, [], "Image decode failed"
+            return False, [], "Image decode failed", "ERROR"
         
         # Inference
         results = self.model(img_numpy, conf=0.7, verbose=False)       
@@ -159,6 +171,7 @@ class ImageFilter:
         # Model trả về None (Không phát hiện gì hoặc confidence thấp)
         action_result = ""
         is_valid_result = False # Default
+        reason_msg = ""
         if not detected_labels:
             action_result = "UNPROCESSED"
             reason_msg = "No Objects Detected"
@@ -181,22 +194,25 @@ class ImageFilter:
         minio_path = None        
         if input_data:
             filename = metadata.get("filename", "unknown.jpg") if metadata else "unknown.jpg"
-            
+            save_name = ""
             if action_result == "KEEP":
                 # Thêm prefix "dataset/" vào trước tên file
                 save_name = f"dataset/{filename}" 
-                minio_path = self._upload_to_minio(input_data, save_name)
+                # minio_path = self._upload_to_minio(input_data, save_name)
                 
             # Ảnh model mù (UNPROCESSED)
             elif action_result == "UNPROCESSED":
                 # Thêm prefix "retrain/" để gom riêng ra
                 save_name = f"retrain/{filename}"
-                minio_path = self._upload_to_minio(input_data, save_name)
+                # minio_path = self._upload_to_minio(input_data, save_name)
             # Model đã được học rồi nên skip
             else:
                 pass
+            
+            if save_name:
+                minio_path = self.image_handler(input_data,save_name)
         # Ghi log mọi case vào MongoDB
-        self._log_to_mongo(
+        self.log_handler(
             metadata=metadata,
             detected_labels=list(detected_labels),
             detections_detail=detailed_info,

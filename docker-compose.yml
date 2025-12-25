@@ -14,7 +14,9 @@ services:
   #   networks:
   #     - mongoNetwork
   api:
-    build: . 
+    build:
+      context: .
+      dockerfile: dockerfile
     container_name: my_python_api
     restart: always
     ports:
