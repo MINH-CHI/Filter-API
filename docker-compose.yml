@@ -31,11 +31,11 @@ services:
       - MONGO_URI=mongodb+srv://minhchisgod672006:minhchitran1@minh-cluster.ov4wdff.mongodb.net/?appName=Minh-Cluster
       # Biến này giúp chặn torch tìm GPU, tránh lỗi
       # - CUDA_VISIBLE_DEVICES=-1
-      - MINIO_ENDPOINT="minio:9000"
-      - MINIO_ACCESS_KEY="minhchisgod672006"
-      - MINIO_SECRET_KEY="minhchitran@"
-      - MINIO_BUCKET_NAME="filter-images-bucket"
-      - MINIO_SECURE="False"
+      # - MINIO_ENDPOINT="minio:9000"
+      # - MINIO_ACCESS_KEY="minhchisgod672006"
+      # - MINIO_SECRET_KEY="minhchitran@"
+      # - MINIO_BUCKET_NAME="filter-images-bucket"
+      # - MINIO_SECURE="False"
       - MODEL_PATH=models/finetuned_nc126_best_mAP.onnx
     deploy:
       resources:
