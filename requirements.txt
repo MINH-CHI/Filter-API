@@ -33,3 +33,4 @@ dnspython
 python-dotenv
 requests
 streamlit
+plotly
