@@ -3,6 +3,7 @@ import requests #type:ignore
 import pandas as pd #type:ignore
 import plotly.express as px #type:ignore
 from pymongo import MongoClient #type:ignore
+import traceback
 import os
 import io
 import sys
@@ -210,6 +211,7 @@ with tab1:
                             st.error(f"Lỗi API: {response.text}")
                     except Exception as e:
                         st.error(f"Lỗi: {e}")
+                        traceback.print_exc()
 with tab2:
     st.header("📸 Giám sát Dữ liệu Thực tế (Pagination)")
     
@@ -288,6 +290,7 @@ with tab2:
                             st.error(f"Lỗi tải ảnh: {e}")
                     else:
                         st.warning("MinIO chưa kết nối")
+                        traceback.print_exc()
 with tab3:
     st.header("🧪 Giám sát Batch Test (Real-time)")
     st.markdown("""
