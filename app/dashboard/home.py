@@ -271,7 +271,7 @@ with tab2:
                     # Tải ảnh từ MinIO & Vẽ Box
                     if minio and minio_path:
                         try:
-                            print(f"Bắt đầu nhận phản hồi từ object: {minio_path}")
+                            st.error(f"Bắt đầu nhận phản hồi từ object: {minio_path}")
                             response = minio.get_object(MINIO_BUCKET, minio_path)
                             if response.status == 200:
                                 print("Trạng thái phản hồi tốt")
@@ -283,7 +283,7 @@ with tab2:
                                 final_img = annotate_image(img_data, detections)
                                 st.image(final_img, use_container_width=True)
                             else:
-                                print("Không có phản hồi")
+                                st.error("Không có phản hồi")
                         except Exception as e:
                             st.error(f"Lỗi tải ảnh: {e}")
                     else:
