@@ -50,7 +50,7 @@ def init_mongo_client():
 @st.cache_resource
 def init_minio_client():
     client = Minio(
-        endpoint=MINIO_ENDPOINT,
+        endpoint=MINIO_ENDPOINT, # localhost:9000
         access_key=MINIO_ACCESS_KEY,
         secret_key=MINIO_SECRET_KEY,
         secure=False
