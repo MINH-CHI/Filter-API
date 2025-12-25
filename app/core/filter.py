@@ -63,7 +63,6 @@ class ImageFilter:
             self.log_handler = lambda **kwargs: print(f"[LOG] {kwargs.get('action')}")
             print("[WARNING] Không có cấu hình Database. Log chỉ in ra console.")
             
-        
         if self.enable_filter:
             # Check nhanh xem máy host có nhận GPU không
             if self.device == 0 and not torch.cuda.is_available():
