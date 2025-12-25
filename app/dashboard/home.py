@@ -290,7 +290,7 @@ with tab2:
                             st.error(f"Lỗi tải ảnh: {e}")
                     else:
                         st.warning("MinIO chưa kết nối")
-                        traceback.print_exc()
+                        st.error(traceback.print_exc())
 with tab3:
     st.header("🧪 Giám sát Batch Test (Real-time)")
     st.markdown("""
