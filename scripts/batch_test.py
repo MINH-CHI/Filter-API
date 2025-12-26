@@ -387,8 +387,8 @@ def run_test():
     processed_files = get_processed_filenames(client[DB_NAME][COLLECTION_NAME])
     client.close()
     
-    # tasks_to_run = [t for t in tasks if t['filename'] not in processed_files]
-    tasks_to_run = filter_and_sample_tasks(tasks, processed_files)
+    tasks_to_run = [t for t in tasks if t['filename'] not in processed_files]
+    # tasks_to_run = filter_and_sample_tasks(tasks, processed_files)
     total_tasks = len(tasks_to_run)
     print(f"📋 Tổng số ảnh cần test: {total_tasks}")
     
