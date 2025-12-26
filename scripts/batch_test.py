@@ -222,7 +222,8 @@ def process_single_task(task, api_url, service):
         "filename": filename,
         "actual_label": actual,
         "type": task['category_type'],
-        "group_type": task.get('group_type', 'UNKNOWN'),
+        # "group_type": task.get('group_type', 'UNKNOWN'),
+        "group_type": "FULL_DATASET",
         "status": "Processing",
         "source": "batch_client_result"
     }

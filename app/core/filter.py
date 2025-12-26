@@ -142,7 +142,7 @@ class ImageFilter:
             return False, [], "Image decode failed", "ERROR"
         
         # Inference
-        results = self.model(img_numpy, conf=0, verbose=False)
+        results = self.model(img_numpy, conf=0.1, verbose=False)
         detailed_info = []
         detected_labels = set()
         
@@ -162,7 +162,7 @@ class ImageFilter:
                 detailed_info.append({
                     "object": label_name,
                     "confidence": round(conf, 2),
-                    "box": box_coords
+                    "box": box_coords   
                 })
                 
                 detected_labels.add(label_name)
