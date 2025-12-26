@@ -142,7 +142,7 @@ class ImageFilter:
             return False, [], "Image decode failed", "ERROR"
         
         # Inference
-        results = self.model(img_numpy, conf=0.7, verbose=False)       
+        results = self.model(img_numpy, conf=0, verbose=False)
         detailed_info = []
         detected_labels = set()
         

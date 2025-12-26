@@ -4,6 +4,7 @@ import io
 import requests # type:ignore
 import pandas as pd # type:ignore
 import time
+import random
 from datetime import datetime
 from tqdm import tqdm # type:ignore
 from pymongo import MongoClient # type:ignore
@@ -13,7 +14,8 @@ from google.oauth2.credentials import Credentials # type:ignore
 from google_auth_oauthlib.flow import InstalledAppFlow # type:ignore
 from googleapiclient.discovery import build # type:ignore
 from googleapiclient.http import MediaIoBaseDownload # type:ignore
-
+import concurrent.futures
+from threading import Lock
 current_dir = os.path.dirname(os.path.abspath(__file__))
 project_root = os.path.dirname(current_dir)
 if project_root not in sys.path:
@@ -33,6 +35,32 @@ DB_NAME = "api_request_log"
 COLLECTION_NAME = "api_unlabeled_images"
 CONFIG_COLLECTION = "system_config"
 
+drive_lock = Lock()
+print_lock = Lock()
+# 1. Nhóm Model Đã Học Tốt (STRONG)
+# Gồm các class có > 170 mẫu
+STRONG_CLASSES = [
+    "bed", 
+    "table",       # Lưu ý: Model học "dining table", hy vọng nó nhận ra "table" chung chung
+    "cabinet", 
+    "dishwasher",
+    "scissors"
+]
+
+# 2. Nhóm Model Học Ít/Yếu (WEAK)
+# Gồm các class < 150 mẫu (Dễ bị nhận diện sai hoặc conf thấp)
+WEAK_CLASSES = [
+    "shelf", 
+    "sofa",        # Chỉ có 82 mẫu -> Khả năng fail cao
+    "toaster"      # Chỉ có 52 mẫu -> Rất yếu
+]
+
+# Tỷ lệ lấy mẫu (Bạn có thể chỉnh lại tùy số lượng ảnh thực tế trong folder)
+RATIOS = {
+    "STRONG": 0.6,  # Lấy 50% từ nhóm Giường, Bàn, Tủ...
+    "WEAK": 0.4    # Lấy 30% từ nhóm Sofa, Toaster...
+    # "UNKNOWN": 0.2  # Lấy 20% từ nhóm Quạt, Chổi (để test lọc nhiễu)
+}
 def get_mongo_client():
     return MongoClient(MONGO_URI)
 def get_active_api_url():
@@ -104,14 +132,15 @@ def find_folder_id_by_name(service, folder_name, parent_id):
 def download_file_bytes(service, file_id):
     """Tải file về RAM dưới dạng bytes"""
     try:
-        request = service.files().get_media(fileId=file_id)
-        fh = io.BytesIO()
-        downloader = MediaIoBaseDownload(fh, request)
-        done = False
-        while done is False:
-            status, done = downloader.next_chunk()
-        fh.seek(0)
-        return fh.getvalue() # Trả về bytes
+        with drive_lock:
+            request = service.files().get_media(fileId=file_id)
+            fh = io.BytesIO()
+            downloader = MediaIoBaseDownload(fh, request)
+            done = False
+            while done is False:
+                status, done = downloader.next_chunk()
+            fh.seek(0)
+            return fh.getvalue() # Trả về bytes
     except Exception:
         return None
 
@@ -171,7 +200,7 @@ def get_processed_filenames(collection):
     """Lấy danh sách các filename đã có status='Done' trong DB"""
     print("🔍 Đang kiểm tra lịch sử trong MongoDB...")
     query = {
-        "source": "batch_script_runner",
+        "source": "batch_test",
         "status": "Done"
     }
     # Chỉ lấy trường filename để tiết kiệm RAM
@@ -179,113 +208,208 @@ def get_processed_filenames(collection):
     processed_set = set(doc['filename'] for doc in records)
     print(f"📚 Tìm thấy {len(processed_set)} ảnh đã xử lý xong trước đó.")
     return processed_set
-def run_test():
-    print("🚀 Bắt đầu Script Batch Test...")
+def process_single_task(task, api_url, service):
+    """Hàm này chạy song song trên mỗi luồng"""
+    filename = task['filename']
+    actual = task['actual_label']
     
-    api_url = get_active_api_url()
-    client = get_mongo_client()
-    collection = client[DB_NAME][COLLECTION_NAME]
-    # Tùy chọn: Xóa dữ liệu cũ
-    # collection.delete_many({"source": "batch_script_runner"})
-    
-    service = get_drive_service()
-    if not service:
-        print("Không thể kết nối được Google Drive")
-        return
+    # Tạo Client Mongo riêng cho luồng này (Thread-safe)
+    local_client = MongoClient(MONGO_URI)
+    local_collection = local_client[DB_NAME][COLLECTION_NAME]
 
-    tasks = build_task_list(service)
-    print(f"📋 Tổng số ảnh cần test: {len(tasks)}")
-    processed_files = get_processed_filenames(collection)
-    tasks_to_run = []
-    for t in tasks:
-        if t['filename'] not in processed_files:
-            tasks_to_run.append(t)
+    result_record = {
+        "timestamp": datetime.now(),
+        "filename": filename,
+        "actual_label": actual,
+        "type": task['category_type'],
+        "group_type": task.get('group_type', 'UNKNOWN'),
+        "status": "Processing",
+        "source": "batch_client_result"
+    }
 
-    for i, task in enumerate(tqdm(tasks_to_run, desc="Processing")):
-        filename = task['filename']
-        actual = task['actual_label']
-        
-        result_record = {
-            "timestamp": datetime.now(),
-            "filename": filename,
-            "actual_label": actual,
-            "type": task['category_type'],
-            "status": "Processing",
-            "source": "batch_script_runner"
-        }
-
+    try:
+        # Tải ảnh
         img_bytes = download_file_bytes(service, task['file_id'])
         
         if img_bytes:
-            try:
-                files = {"file": (filename, img_bytes, 'image/jpeg')}
-                data = {"source": "batch_test"}
-                headers = {"x-api-key": API_KEY}
+            # Gọi API (Phần này chạy song song, không cần Lock)
+            files = {"file": (filename, img_bytes, 'image/jpeg')}
+            data = {"source": "batch_test"}
+            headers = {"x-api-key": API_KEY}
+            
+            resp = requests.post(api_url, files=files, data=data, headers=headers, timeout=60)
+            
+            if resp.status_code == 200:
+                res_json = resp.json()
+                detected_labels = res_json.get("detected_labels", [])
+                action = res_json.get("action", "UNKNOWN")
+                detections = res_json.get("detections", [])
                 
-                # Gọi API
-                resp = requests.post(api_url, files=files, data=data, headers=headers, timeout=30)
-                
-                if resp.status_code == 200:
-                    res_json = resp.json()
-                    
-                    # Lấy Detected Labels & Action
-                    detected_labels = res_json.get("detected_labels", [])
-                    action = res_json.get("action", "UNKNOWN")
-                    
-                    # Xử lý Detections & Bounding Box
-                    detections = res_json.get("detections", []) # Lấy list chi tiết
-                    
-                    final_conf = 0.0
-                    bboxes = []
-
-                    if detections:
-                        # Lấy Max Confidence
-                        final_conf = max([d.get('confidence', 0) for d in detections])
+                bboxes = []
+                all_confs = []
+                target_confs = []
+                actual_norm = str(actual).lower().strip()
+                if detections:
+                    for d in detections:
+                        conf = d.get('confidence', 0)
+                        label = str(d.get('object', '')).lower()
                         
-                        # Trích xuất Bounding Boxes
-                        for d in detections:
-                            if 'box' in d:
-                                bboxes.append(str(d['box']))
-                    
-                    # Tạo chuỗi Box để hiển thị trên Dashboard
-                    bbox_str = " | ".join(bboxes) if bboxes else ""
-                    pred_str = ", ".join(detected_labels) if detected_labels else "None"
-                    
-                    # Logic kiểm tra đúng sai
-                    is_correct = False
-                    if task['category_type'].lower() == "unknown":
-                        is_correct = (not detected_labels) or (action == "UNPROCESSED")
-                    else:
-                        actual_norm = str(actual).lower().strip()
-                        for lbl in detected_labels:
-                            if actual_norm in str(lbl).lower():
-                                is_correct = True
-                                break
-                    
-                    # Update MongoDB Record
-                    result_record.update({
-                        "predicted_label": pred_str,
-                        "confidence": final_conf,
-                        "bounding_box": bbox_str,
-                        "action": action,
-                        "is_correct": is_correct,
-                        "detected_labels": detected_labels,
-                        "status": "Done"
-                    })
-                    
-                else:
-                    result_record["status"] = f"API Error {resp.status_code}"
-                    print(f"\nAPI Error: {resp.text}")
+                        # Lưu box
+                        if 'box' in d: 
+                            bboxes.append(str(d['box']))
+                        
+                        all_confs.append(conf)
 
-            except Exception as e:
-                result_record["status"] = f"Code Error: {str(e)}"
+                        # Kiểm tra xem object này có khớp với Actual Label không?
+                        # Ví dụ: actual="table" khớp với label="dining table"
+                        if actual_norm in label:
+                            target_confs.append(conf)
+                if target_confs:
+                    # Model CÓ nhìn thấy vật thể đúng
+                    # Lấy max của đúng vật thể đó (VD: Lấy 0.15 của Table, bỏ qua 0.95 của Person)
+                    final_conf = max(target_confs)
+                elif all_confs:
+                    # Model KHÔNG thấy vật thể đúng
+                    # Lấy max của vật thể gây nhiễu nhất (để biết model đang nhìn nhầm ra cái gì mạnh nhất)
+                    final_conf = max(all_confs) 
+                else:
+                    final_conf = 0.0
+        
+                bbox_str = " | ".join(bboxes) if bboxes else ""
+                pred_str = ", ".join(detected_labels) if detected_labels else "None"
+                
+                is_correct = False
+                if task['category_type'].lower() == "unknown":
+                    is_correct = (not detected_labels) or (action == "UNPROCESSED")
+                else:
+                    actual_norm = str(actual).lower().strip()
+                    for lbl in detected_labels:
+                        if actual_norm in str(lbl).lower():
+                            is_correct = True
+                            break
+                
+                result_record.update({
+                    "predicted_label": pred_str,
+                    "confidence": final_conf,
+                    "bounding_box": bbox_str,
+                    "action": action,
+                    "is_correct": is_correct,
+                    "detected_labels": detected_labels,
+                    "status": "Done"
+                })
+            else:
+                result_record["status"] = f"API Error {resp.status_code}"
         else:
             result_record["status"] = "Download Failed"
 
-        # Lưu vào Mongo
-        collection.insert_one(result_record)
-        time.sleep(5)
+    except Exception as e:
+        result_record["status"] = f"Code Error: {str(e)}"
+    
+    finally:
+        # Ghi vào DB và đóng kết nối
+        local_collection.insert_one(result_record)
+        local_client.close()
+def filter_and_sample_tasks(all_tasks, processed_files):
+    """
+    Hàm này sẽ lọc task dựa trên list STRONG/WEAK và lấy mẫu ngẫu nhiên.
+    """
+    print("\n⚖️  Đang phân loại và lấy mẫu dữ liệu...")
+    
+    # Loại bỏ các file đã chạy rồi
+    pending_tasks = [t for t in all_tasks if t['filename'] not in processed_files]
+    
+    buckets = {
+        "STRONG": [],
+        "WEAK": [],
+        "OTHERS": [] # Những folder không nằm trong config
+    }
 
-    print("✅ Đã hoàn thành test.")
+    # Phân loại vào từng rọ
+    for task in pending_tasks:
+        label = task['actual_label'] # Tên folder trên Drive
+        
+        if label in STRONG_CLASSES:
+            task['group_type'] = 'STRONG' # Gắn nhãn để sau này dễ thống kê
+            buckets["STRONG"].append(task)
+        elif label in WEAK_CLASSES:
+            task['group_type'] = 'WEAK'
+            buckets["WEAK"].append(task)
+        else:
+            task['group_type'] = 'OTHERS'
+            buckets["OTHERS"].append(task)
+
+    print(f"📊 Thống kê ảnh chưa chạy trên Drive:")
+    print(f"   - Strong (Giường, Bàn...): {len(buckets['STRONG'])}")
+    print(f"   - Weak (Sofa, Toaster...): {len(buckets['WEAK'])}")
+    print(f"   - Khác: {len(buckets['OTHERS'])}")
+
+    # Lấy mẫu theo tỷ lệ
+    final_tasks = []
+    
+    for group, ratio in RATIOS.items():
+        if group not in buckets: continue
+        
+        target_count = int(1000 * ratio)
+        available_count = len(buckets[group])
+        take_count = min(target_count, available_count)
+        
+        if available_count > 0:
+            selected = random.sample(buckets[group], take_count)
+            final_tasks.extend(selected)
+            print(f"✅ Đã chọn {len(selected)} ảnh nhóm {group}")
+
+    # 4. (Tùy chọn) Nếu muốn lấy thêm nhóm OTHERS cho đủ số lượng
+    # Nếu không muốn test nhóm OTHERS thì bỏ qua đoạn này
+    current_count = len(final_tasks)
+    if current_count < 1000 and buckets["OTHERS"]:
+        needed = 1000 - current_count
+        take = min(needed, len(buckets["OTHERS"]))
+        final_tasks.extend(random.sample(buckets["OTHERS"], take))
+        print(f"➕ Lấy bù thêm {take} ảnh từ nhóm OTHERS")
+
+    random.shuffle(final_tasks) # Xáo trộn để chạy đa luồng đều hơn
+    return final_tasks
+def run_test():
+    print("🚀 Bắt đầu Test (Multi-thread)...")
+    
+    api_url = get_active_api_url()
+    
+    # Init Service (1 lần duy nhất)
+    service = get_drive_service()
+    if not service:
+        print("❌ Không kết nối được Google Drive")
+        return
+
+    # Lấy danh sách task và lọc trùng
+    tasks = build_task_list(service)
+    
+    client = get_mongo_client()
+    processed_files = get_processed_filenames(client[DB_NAME][COLLECTION_NAME])
+    client.close()
+    
+    # tasks_to_run = [t for t in tasks if t['filename'] not in processed_files]
+    tasks_to_run = filter_and_sample_tasks(tasks, processed_files)
+    total_tasks = len(tasks_to_run)
+    print(f"📋 Tổng số ảnh cần test: {total_tasks}")
+    
+    if total_tasks == 0:
+        print("✅ Đã xử lý hết. Không còn gì để chạy.")
+        return
+
+    # Max Workers = 5 để không bị Google chặn rate limit
+    MAX_WORKERS = 5 
+    print(f"⚡ Đang chạy với {MAX_WORKERS} luồng song song...")
+    
+    with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+        # Submit tất cả công việc vào Pool
+        futures = []
+        for task in tasks_to_run:
+            futures.append(executor.submit(process_single_task, task, api_url, service))
+        
+        # Dùng tqdm để hiện thanh loading
+        for _ in tqdm(concurrent.futures.as_completed(futures), total=total_tasks, desc="Processing Images"):
+            pass
+
+    print("\n✅ Đã hoàn thành test đa luồng.")
 if __name__ == "__main__":
     run_test()
