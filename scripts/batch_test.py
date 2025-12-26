@@ -222,8 +222,8 @@ def process_single_task(task, api_url, service):
         "filename": filename,
         "actual_label": actual,
         "type": task['category_type'],
-        # "group_type": task.get('group_type', 'UNKNOWN'),
-        "group_type": "FULL_DATASET",
+        "group_type": task.get('group_type', 'FULL_DATASET'),
+        # "group_type": "FULL_DATASET",
         "status": "Processing",
         "source": "batch_client_result"
     }
@@ -311,64 +311,63 @@ def process_single_task(task, api_url, service):
         local_collection.insert_one(result_record)
         local_client.close()
 def filter_and_sample_tasks(all_tasks, processed_files):
-    """
-    Hàm này sẽ lọc task dựa trên list STRONG/WEAK và lấy mẫu ngẫu nhiên.
-    """
-    print("\n⚖️  Đang phân loại và lấy mẫu dữ liệu...")
+    print("\n⚖️  Đang lấy mẫu dữ liệu...")
     
     # Loại bỏ các file đã chạy rồi
     pending_tasks = [t for t in all_tasks if t['filename'] not in processed_files]
     
-    buckets = {
-        "STRONG": [],
-        "WEAK": [],
-        "OTHERS": [] # Những folder không nằm trong config
-    }
-
-    # Phân loại vào từng rọ
+    class_buckets = {}
     for task in pending_tasks:
-        label = task['actual_label'] # Tên folder trên Drive
-        
-        if label in STRONG_CLASSES:
-            task['group_type'] = 'STRONG' # Gắn nhãn để sau này dễ thống kê
-            buckets["STRONG"].append(task)
-        elif label in WEAK_CLASSES:
-            task['group_type'] = 'WEAK'
-            buckets["WEAK"].append(task)
-        else:
-            task['group_type'] = 'OTHERS'
-            buckets["OTHERS"].append(task)
+        label = task['actual_label']
+        if label not in class_buckets:
+            class_buckets[label] = []
+        class_buckets[label].append(task)
+    
+    available_classes = list(class_buckets.keys())
+    num_classes = len(available_classes)
+    
+    if num_classes == 0:
+        print("⚠️ Không tìm thấy class nào hoặc tất cả ảnh đã được xử lý!")
+        return []
 
-    print(f"📊 Thống kê ảnh chưa chạy trên Drive:")
-    print(f"   - Strong (Giường, Bàn...): {len(buckets['STRONG'])}")
-    print(f"   - Weak (Sofa, Toaster...): {len(buckets['WEAK'])}")
-    print(f"   - Khác: {len(buckets['OTHERS'])}")
+    # Tính toán số lượng cần lấy cho mỗi class
+    # Ví dụ: 1000 / 8 = 125. Dư 0.
+    quota_per_class = 1000 // num_classes
+    remainder = 1000 % num_classes # Số dư (để xử lý nếu chia không hết)
 
-    # Lấy mẫu theo tỷ lệ
+    print(f"📊 Tìm thấy {num_classes} classes. Mục tiêu tổng: {1000} ảnh.")
+    print(f"👉 Trung bình mỗi class sẽ lấy khoảng: {quota_per_class} ảnh.")
+
     final_tasks = []
     
-    for group, ratio in RATIOS.items():
-        if group not in buckets: continue
+    # Lấy mẫu ngẫu nhiên
+    for i, (label, tasks) in enumerate(class_buckets.items()):
+        total_in_class = len(tasks)
         
-        target_count = int(1000 * ratio)
-        available_count = len(buckets[group])
-        take_count = min(target_count, available_count)
+        # Tính số lượng cần lấy cho class này
+        # Cộng thêm 1 vào các class đầu tiên nếu phép chia có dư
+        n_take = quota_per_class + (1 if i < remainder else 0)
         
-        if available_count > 0:
-            selected = random.sample(buckets[group], take_count)
+        # Đảm bảo không lấy quá số lượng hiện có 
+        n_take = min(n_take, total_in_class)
+        
+        if n_take > 0:
+            # Random sample
+            selected = random.sample(tasks, n_take)
+            
+            # Gán nhãn nhóm để tiện theo dõi sau này (Optional)
+            for t in selected:
+                t['group_type'] = "EVEN_TEST_1K" 
+            
             final_tasks.extend(selected)
-            print(f"✅ Đã chọn {len(selected)} ảnh nhóm {group}")
+            print(f"  ✅ Class '{label}': Đã chọn {len(selected)}/{total_in_class} ảnh")
+        else:
+            print(f"  ⚠️ Class '{label}': Không còn ảnh nào chưa xử lý.")
 
-    # 4. (Tùy chọn) Nếu muốn lấy thêm nhóm OTHERS cho đủ số lượng
-    # Nếu không muốn test nhóm OTHERS thì bỏ qua đoạn này
-    current_count = len(final_tasks)
-    if current_count < 1000 and buckets["OTHERS"]:
-        needed = 1000 - current_count
-        take = min(needed, len(buckets["OTHERS"]))
-        final_tasks.extend(random.sample(buckets["OTHERS"], take))
-        print(f"➕ Lấy bù thêm {take} ảnh từ nhóm OTHERS")
-
-    random.shuffle(final_tasks) # Xáo trộn để chạy đa luồng đều hơn
+    # Xáo trộn lần cuối để khi chạy đa luồng các class được xử lý xen kẽ
+    random.shuffle(final_tasks)
+    
+    print(f"🚀 TỔNG CỘNG: Đã chọn được {len(final_tasks)} ảnh để chạy test.")
     return final_tasks
 def run_test():
     print("🚀 Bắt đầu Test (Multi-thread)...")
@@ -388,8 +387,8 @@ def run_test():
     processed_files = get_processed_filenames(client[DB_NAME][COLLECTION_NAME])
     client.close()
     
-    tasks_to_run = [t for t in tasks if t['filename'] not in processed_files]
-    # tasks_to_run = filter_and_sample_tasks(tasks, processed_files)
+    # tasks_to_run = [t for t in tasks if t['filename'] not in processed_files]
+    tasks_to_run = filter_and_sample_tasks(tasks, processed_files)
     total_tasks = len(tasks_to_run)
     print(f"📋 Tổng số ảnh cần test: {total_tasks}")
     
