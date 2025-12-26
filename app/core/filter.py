@@ -196,17 +196,17 @@ class ImageFilter:
             save_name = ""
             if action_result == "KEEP":
                 # Thêm prefix "dataset/" vào trước tên file
-                save_name = f"dataset/{filename}" 
+                save_name = f"keep/{filename}" 
                 # minio_path = self._upload_to_minio(input_data, save_name)
                 
             # Ảnh model mù (UNPROCESSED)
             elif action_result == "UNPROCESSED":
                 # Thêm prefix "retrain/" để gom riêng ra
-                save_name = f"retrain/{filename}"
+                save_name = f"unprocessed/{filename}"
                 # minio_path = self._upload_to_minio(input_data, save_name)
             # Model đã được học rồi nên skip
             else:
-                pass
+                save_name = f"skip/{filename}"
             
             if save_name:
                 minio_path = self.image_handler(input_data,save_name)
