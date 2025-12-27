@@ -88,7 +88,7 @@ class ImageFilter:
     def _upload_to_minio(self, image_bytes, full_path_name):
         """
         Upload ảnh lên MinIO.
-        :param full_path_name: Tên file có thể kèm folder (VD: 'retrain/image.jpg')
+        :param full_path_name: Tên file có thể kèm folder (VD: 'keep/image.jpg')
         """
         if not self.minio_client:
             return None

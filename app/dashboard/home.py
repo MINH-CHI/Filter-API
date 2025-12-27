@@ -138,6 +138,21 @@ def annotate_image(image_source, detections):
             draw.rectangle(text_bbox, fill="red")
             draw.text((box[0], box[1]), text, fill="white", font=font)
     return image
+def get_minio_path_by_filename(filename):
+    """Tìm đường dẫn ảnh trong log server dựa vào tên file"""
+    client = init_mongo_client()
+    if not client: return None
+    
+    # Tìm trong collection log của server (batch_test)
+    # Lưu ý: Sửa 'batch_test' thành đúng source server nếu khác
+    record = client[DB_NAME][COLLECTION_NAME].find_one({
+        "filename": filename,
+        "source": "batch_test"  # <--- Tìm ở nguồn Server
+    })
+    
+    if record:
+        return record.get("minio_image_path")
+    return None
 def load_logs(start_date, end_date):
     client = init_mongo_client()
     if not client:
@@ -272,6 +287,9 @@ with tab2:
 
             # --- Chuẩn bị ảnh ---
             minio_path = row.get("minio_image_path")
+            if not minio_path:
+                minio_path = get_minio_path_by_filename(row.get('filename'))
+            
             img_bytes = None
             
             # --- Cột 2: Ảnh Gốc từ MinIO ---
@@ -286,10 +304,9 @@ with tab2:
                         
                         st.image(img_bytes, caption="Original from MinIO", use_container_width=True)
                     except Exception as e:
-                        st.error(f"Lỗi MinIO: {e}")
-                        st.caption(f"Path: {minio_path}")
+                        st.error(f"Lỗi MinIO")
                 else:
-                    st.warning("Không có MinIO Path")
+                    st.warning("Không tìm thấy ảnh (No Path)")
 
             # --- Cột 3: Ảnh Đã Vẽ Box ---
             with c_proc:
