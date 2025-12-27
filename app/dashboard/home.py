@@ -170,7 +170,7 @@ def load_test_results(limit=100):
         return pd.DataFrame()
     db = client[DB_NAME]
     collection = db[COLLECTION_NAME] 
-    query = {"source": "batch_script_runner"}
+    query = {"source": "batch_client_result"}
     try:
         # Lấy 500 record mới nhất
         data = list(collection.find(query).sort("timestamp", -1).limit(limit))
@@ -221,7 +221,7 @@ with tab2:
         if st.button("🗑️ Xóa Log Test", type="primary"):
             client = init_mongo_client()
             if client:
-                client[DB_NAME][COLLECTION_NAME].delete_many({"source": "batch_script_runner"})
+                client[DB_NAME][COLLECTION_NAME].delete_many({"source": "batch_client_result"})
                 st.toast("Đã xóa dữ liệu test!", icon="🧹")
                 time.sleep(1)
                 st.rerun()
