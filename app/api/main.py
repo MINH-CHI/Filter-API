@@ -28,7 +28,7 @@ MINIO_CONFIG = {
 MODEL_PATH = os.getenv("MODEL_PATH")
 MONGO_URI = os.getenv("MONGO_URI")
 DB_NAME = "api_request_log"
-COLLECTION_NAME = "api_unlabeled_images"
+COLLECTION_NAME = "test"
 TARGET_CLASSES = ["smartphone", "pen", "note paper","t-shirt","smartwatch","glasses","bracelet","dishwasher","cabinet","sofa","box cutter","shoes","table","scissor","paper"]
 CLASS_MAPPING = {
     0: 'person', 1: 'bicycle', 2: 'car', 3: 'motorcycle', 4: 'airplane',

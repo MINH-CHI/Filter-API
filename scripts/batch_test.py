@@ -32,7 +32,7 @@ DRIVE_SUB_FOLDER_NAME = "object_detection"
 DRIVE_VPP_FOLDER_NAME = "classes-do-gia-dung"
 MONGO_URI = os.getenv("MONGO_URI")
 DB_NAME = "api_request_log" 
-COLLECTION_NAME = "api_unlabeled_images"
+COLLECTION_NAME = "test"
 CONFIG_COLLECTION = "system_config"
 
 drive_lock = Lock()
