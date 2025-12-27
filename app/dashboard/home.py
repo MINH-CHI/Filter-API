@@ -27,7 +27,7 @@ st.set_page_config(page_title="AI Image Filter Dashboard", layout="wide", page_i
 # load_dotenv(env_path)
 # MONGO_URI = os.getenv("MONGO_URI")
 DB_NAME = "api_request_log"
-COLLECTION_NAME = "test" 
+COLLECTION_NAME = "test_confidence_0.1" 
 CONFIG_COLLECTION = "system_config"
 
 API_KEY = load_config("API_KEY", "default-secret-key")

@@ -28,7 +28,7 @@ MINIO_CONFIG = {
 MODEL_PATH = os.getenv("MODEL_PATH")
 MONGO_URI = os.getenv("MONGO_URI")
 DB_NAME = "api_request_log"
-COLLECTION_NAME = "test"
+COLLECTION_NAME = "test_confidence_0.1"
 TARGET_CLASSES = ["smartphone", "pen", "note paper","t-shirt","smartwatch","glasses","bracelet","dishwasher","cabinet","sofa","box cutter","shoes","table","scissor","paper"]
 CLASS_MAPPING = {
     0: 'person', 1: 'bicycle', 2: 'car', 3: 'motorcycle', 4: 'airplane',
