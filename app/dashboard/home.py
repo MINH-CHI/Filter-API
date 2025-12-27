@@ -177,10 +177,6 @@ def load_test_results(limit=100):
         return pd.DataFrame(data)
     except Exception:
         return pd.DataFrame()
-st.title("🕵️ Hệ thống Kiểm soát & Lọc Ảnh AI")
-if not API_KEY:
-    st.warning("⚠️ Vui lòng nhập **API Key** ở thanh bên trái (Sidebar) để bắt đầu sử dụng.")
-    st.stop()
 
 tab1, tab2 = st.tabs(["🚀 Demo & Visualize", "🧪 Phân tích Test"])
 
